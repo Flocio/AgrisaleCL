@@ -1,0 +1,689 @@
+"""
+数据库连接池和并发控制管理
+支持 SQLite 多连接并发访问，确保数据一致性和高可用性
+"""
+
+import sqlite3
+import threading
+import time
+import logging
+from contextlib import contextmanager
+from queue import Queue, Empty
+from typing import Optional, Callable, Any
+from pathlib import Path
+import os
+
+# 配置日志
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+class SQLiteConnectionPool:
+    """
+    SQLite 连接池管理器
+    解决 SQLite 并发访问问题，提供连接池和重试机制
+    """
+    
+    def __init__(
+        self,
+        db_path: str,
+        max_connections: int = 10,
+        timeout: float = 30.0,
+        busy_timeout: int = 5000,  # SQLite busy timeout (毫秒)
+        retry_attempts: int = 3,
+        retry_delay: float = 0.1
+    ):
+        """
+        初始化连接池
+        
+        Args:
+            db_path: 数据库文件路径
+            max_connections: 最大连接数（默认 10，适合 3-4 人并发）
+            timeout: 获取连接的超时时间（秒）
+            busy_timeout: SQLite busy timeout（毫秒），默认 5 秒
+            retry_attempts: 重试次数
+            retry_delay: 重试延迟（秒）
+        """
+        self.db_path = db_path
+        self.max_connections = max_connections
+        self.timeout = timeout
+        self.busy_timeout = busy_timeout
+        self.retry_attempts = retry_attempts
+        self.retry_delay = retry_delay
+        
+        # 连接池队列
+        self._pool: Queue = Queue(maxsize=max_connections)
+        # 当前使用的连接数
+        self._active_connections = 0
+        # 线程锁
+        self._lock = threading.Lock()
+        # 统计信息
+        self._stats = {
+            'total_connections': 0,
+            'active_connections': 0,
+            'pool_size': 0,
+            'retry_count': 0,
+            'busy_errors': 0
+        }
+        
+        # 确保数据库目录存在
+        db_dir = os.path.dirname(db_path)
+        if db_dir and not os.path.exists(db_dir):
+            os.makedirs(db_dir, exist_ok=True)
+        
+        # 初始化连接池
+        self._initialize_pool()
+        
+        # 初始化数据库结构
+        self._initialize_database()
+        
+        logger.info(f"SQLite 连接池初始化完成: {db_path}, 最大连接数: {max_connections}")
+    
+    def _initialize_pool(self):
+        """初始化连接池，预创建连接"""
+        for _ in range(min(3, self.max_connections)):  # 预创建 3 个连接
+            conn = self._create_connection()
+            if conn:
+                self._pool.put(conn)
+                self._stats['total_connections'] += 1
+    
+    def _create_connection(self) -> Optional[sqlite3.Connection]:
+        """
+        创建新的数据库连接
+        
+        Returns:
+            SQLite 连接对象，失败返回 None
+        """
+        try:
+            conn = sqlite3.connect(
+                self.db_path,
+                timeout=self.busy_timeout / 1000.0,  # 转换为秒
+                check_same_thread=False  # 允许多线程使用
+            )
+            
+            # 配置连接
+            conn.execute("PRAGMA journal_mode = WAL")  # 启用 WAL 模式，提高并发性能
+            conn.execute("PRAGMA synchronous = NORMAL")  # 平衡性能和安全性
+            conn.execute("PRAGMA foreign_keys = ON")  # 启用外键约束
+            conn.execute(f"PRAGMA busy_timeout = {self.busy_timeout}")  # 设置 busy timeout
+            
+            # 设置行工厂，返回字典格式
+            conn.row_factory = sqlite3.Row
+            
+            return conn
+        except Exception as e:
+            logger.error(f"创建数据库连接失败: {e}")
+            return None
+    
+    def _initialize_database(self):
+        """初始化数据库结构（如果不存在）"""
+        try:
+            with self.get_connection() as conn:
+                # 检查数据库版本
+                cursor = conn.execute("PRAGMA user_version")
+                version = cursor.fetchone()[0]
+                
+                if version == 0:
+                    # 首次创建数据库
+                    logger.info("首次创建数据库，执行初始化脚本...")
+                    self._create_tables(conn)
+                    self._set_version(conn, 12)
+                else:
+                    # 升级数据库
+                    logger.info(f"数据库版本: {version}, 检查是否需要升级...")
+                    self._upgrade_database(conn, version, 12)
+        except Exception as e:
+            logger.error(f"数据库初始化失败: {e}")
+            raise
+    
+    def _create_tables(self, conn: sqlite3.Connection):
+        """创建所有表"""
+        # 用户表
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL UNIQUE,
+                password TEXT NOT NULL,
+                created_at TEXT DEFAULT (datetime('now')),
+                last_login_at TEXT
+            )
+        ''')
+        
+        # 产品表
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS products (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                userId INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                description TEXT,
+                stock REAL DEFAULT 0,
+                unit TEXT NOT NULL CHECK(unit IN ('斤', '公斤', '袋')),
+                supplierId INTEGER,
+                version INTEGER DEFAULT 1,
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (userId) REFERENCES users (id) ON DELETE CASCADE,
+                FOREIGN KEY (supplierId) REFERENCES suppliers (id) ON DELETE SET NULL,
+                UNIQUE(userId, name)
+            )
+        ''')
+        
+        # 供应商表
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS suppliers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                userId INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                note TEXT,
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (userId) REFERENCES users (id) ON DELETE CASCADE,
+                UNIQUE(userId, name)
+            )
+        ''')
+        
+        # 客户表
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS customers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                userId INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                note TEXT,
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (userId) REFERENCES users (id) ON DELETE CASCADE,
+                UNIQUE(userId, name)
+            )
+        ''')
+        
+        # 员工表
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS employees (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                userId INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                note TEXT,
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (userId) REFERENCES users (id) ON DELETE CASCADE,
+                UNIQUE(userId, name)
+            )
+        ''')
+        
+        # 采购表
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS purchases (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                userId INTEGER NOT NULL,
+                productName TEXT NOT NULL,
+                quantity REAL NOT NULL,
+                purchaseDate TEXT,
+                supplierId INTEGER,
+                totalPurchasePrice REAL,
+                note TEXT,
+                created_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (userId) REFERENCES users (id) ON DELETE CASCADE,
+                FOREIGN KEY (supplierId) REFERENCES suppliers (id) ON DELETE SET NULL)
+        ''')
+        
+        # 销售表
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS sales (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                userId INTEGER NOT NULL,
+                productName TEXT NOT NULL,
+                quantity REAL NOT NULL,
+                customerId INTEGER,
+                saleDate TEXT,
+                totalSalePrice REAL,
+                note TEXT,
+                created_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (userId) REFERENCES users (id) ON DELETE CASCADE,
+                FOREIGN KEY (customerId) REFERENCES customers (id) ON DELETE SET NULL)
+        ''')
+        
+        # 退货表
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS returns (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                userId INTEGER NOT NULL,
+                productName TEXT NOT NULL,
+                quantity REAL NOT NULL,
+                customerId INTEGER,
+                returnDate TEXT,
+                totalReturnPrice REAL,
+                note TEXT,
+                created_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (userId) REFERENCES users (id) ON DELETE CASCADE,
+                FOREIGN KEY (customerId) REFERENCES customers (id) ON DELETE SET NULL)
+        ''')
+        
+        # 进账表
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS income (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                userId INTEGER NOT NULL,
+                incomeDate TEXT NOT NULL,
+                customerId INTEGER,
+                amount REAL NOT NULL,
+                discount REAL DEFAULT 0,
+                employeeId INTEGER,
+                paymentMethod TEXT NOT NULL CHECK(paymentMethod IN ('现金', '微信转账', '银行卡')),
+                note TEXT,
+                created_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (userId) REFERENCES users (id) ON DELETE CASCADE,
+                FOREIGN KEY (customerId) REFERENCES customers (id) ON DELETE SET NULL,
+                FOREIGN KEY (employeeId) REFERENCES employees (id) ON DELETE SET NULL)
+        ''')
+        
+        # 汇款表
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS remittance (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                userId INTEGER NOT NULL,
+                remittanceDate TEXT NOT NULL,
+                supplierId INTEGER,
+                amount REAL NOT NULL,
+                employeeId INTEGER,
+                paymentMethod TEXT NOT NULL CHECK(paymentMethod IN ('现金', '微信转账', '银行卡')),
+                note TEXT,
+                created_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (userId) REFERENCES users (id) ON DELETE CASCADE,
+                FOREIGN KEY (supplierId) REFERENCES suppliers (id) ON DELETE SET NULL,
+                FOREIGN KEY (employeeId) REFERENCES employees (id) ON DELETE SET NULL)
+        ''')
+        
+        # 用户设置表
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS user_settings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                userId INTEGER NOT NULL UNIQUE,
+                deepseek_api_key TEXT,
+                deepseek_model TEXT DEFAULT 'deepseek-chat',
+                deepseek_temperature REAL DEFAULT 0.7,
+                deepseek_max_tokens INTEGER DEFAULT 2000,
+                dark_mode INTEGER DEFAULT 0,
+                auto_backup_enabled INTEGER DEFAULT 0,
+                auto_backup_interval INTEGER DEFAULT 15,
+                auto_backup_max_count INTEGER DEFAULT 20,
+                last_backup_time TEXT,
+                show_online_users INTEGER DEFAULT 1,
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (userId) REFERENCES users (id) ON DELETE CASCADE)
+        ''')
+        
+        # 在线用户表（用于跟踪在线状态）
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS online_users (
+                userId INTEGER PRIMARY KEY,
+                username TEXT NOT NULL,
+                last_heartbeat TEXT DEFAULT (datetime('now')),
+                current_action TEXT,
+                FOREIGN KEY (userId) REFERENCES users (id) ON DELETE CASCADE)
+        ''')
+        
+        # 创建索引以提高查询性能
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_products_userId ON products(userId)')
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_purchases_userId ON purchases(userId)')
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_sales_userId ON sales(userId)')
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_returns_userId ON returns(userId)')
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_income_userId ON income(userId)')
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_remittance_userId ON remittance(userId)')
+        
+        conn.commit()
+        logger.info("数据库表创建完成")
+    
+    def _set_version(self, conn: sqlite3.Connection, version: int):
+        """设置数据库版本"""
+        conn.execute(f"PRAGMA user_version = {version}")
+        conn.commit()
+    
+    def _upgrade_database(self, conn: sqlite3.Connection, old_version: int, new_version: int):
+        """升级数据库结构"""
+        if old_version >= new_version:
+            return
+        
+        logger.info(f"开始数据库升级: {old_version} -> {new_version}")
+        
+        # 版本 5: 添加 employees, income, remittance 表
+        if old_version < 5:
+            logger.info("升级到版本 5: 添加 employees, income, remittance 表")
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS employees (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    userId INTEGER NOT NULL,
+                    name TEXT NOT NULL,
+                    note TEXT,
+                    created_at TEXT DEFAULT (datetime('now')),
+                    updated_at TEXT DEFAULT (datetime('now')),
+                    FOREIGN KEY (userId) REFERENCES users (id) ON DELETE CASCADE,
+                    UNIQUE(userId, name)
+                )
+            ''')
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS income (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    userId INTEGER NOT NULL,
+                    incomeDate TEXT NOT NULL,
+                    customerId INTEGER,
+                    amount REAL NOT NULL,
+                    discount REAL DEFAULT 0,
+                    employeeId INTEGER,
+                    paymentMethod TEXT NOT NULL CHECK(paymentMethod IN ('现金', '微信转账', '银行卡')),
+                    note TEXT,
+                    created_at TEXT DEFAULT (datetime('now')),
+                    FOREIGN KEY (userId) REFERENCES users (id) ON DELETE CASCADE,
+                    FOREIGN KEY (customerId) REFERENCES customers (id) ON DELETE SET NULL,
+                    FOREIGN KEY (employeeId) REFERENCES employees (id) ON DELETE SET NULL)
+            ''')
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS remittance (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    userId INTEGER NOT NULL,
+                    remittanceDate TEXT NOT NULL,
+                    supplierId INTEGER,
+                    amount REAL NOT NULL,
+                    employeeId INTEGER,
+                    paymentMethod TEXT NOT NULL CHECK(paymentMethod IN ('现金', '微信转账', '银行卡')),
+                    note TEXT,
+                    created_at TEXT DEFAULT (datetime('now')),
+                    FOREIGN KEY (userId) REFERENCES users (id) ON DELETE CASCADE,
+                    FOREIGN KEY (supplierId) REFERENCES suppliers (id) ON DELETE SET NULL,
+                    FOREIGN KEY (employeeId) REFERENCES employees (id) ON DELETE SET NULL)
+            ''')
+        
+        # 版本 11: 为 products 表添加 supplierId 字段
+        if old_version < 11:
+            logger.info("升级到版本 11: 为 products 表添加 supplierId 字段")
+            try:
+                conn.execute('ALTER TABLE products ADD COLUMN supplierId INTEGER')
+            except sqlite3.OperationalError:
+                # 字段可能已存在
+                pass
+        
+        # 版本 12: 添加自动备份字段和在线用户表
+        if old_version < 12:
+            logger.info("升级到版本 12: 添加自动备份字段和在线用户表")
+            # 检查并添加自动备份字段
+            cursor = conn.execute("PRAGMA table_info(user_settings)")
+            columns = [row[1] for row in cursor.fetchall()]
+            
+            if 'auto_backup_enabled' not in columns:
+                conn.execute('ALTER TABLE user_settings ADD COLUMN auto_backup_enabled INTEGER DEFAULT 0')
+            if 'auto_backup_interval' not in columns:
+                conn.execute('ALTER TABLE user_settings ADD COLUMN auto_backup_interval INTEGER DEFAULT 15')
+            if 'auto_backup_max_count' not in columns:
+                conn.execute('ALTER TABLE user_settings ADD COLUMN auto_backup_max_count INTEGER DEFAULT 20')
+            if 'last_backup_time' not in columns:
+                conn.execute('ALTER TABLE user_settings ADD COLUMN last_backup_time TEXT')
+            if 'show_online_users' not in columns:
+                conn.execute('ALTER TABLE user_settings ADD COLUMN show_online_users INTEGER DEFAULT 1')
+            
+            # 创建在线用户表
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS online_users (
+                    userId INTEGER PRIMARY KEY,
+                    username TEXT NOT NULL,
+                    last_heartbeat TEXT DEFAULT (datetime('now')),
+                    current_action TEXT,
+                    FOREIGN KEY (userId) REFERENCES users (id) ON DELETE CASCADE)
+            ''')
+        
+        # 添加版本字段和索引（如果不存在）
+        try:
+            conn.execute('ALTER TABLE products ADD COLUMN version INTEGER DEFAULT 1')
+        except sqlite3.OperationalError:
+            pass
+        
+        try:
+            conn.execute('ALTER TABLE products ADD COLUMN created_at TEXT DEFAULT (datetime("now"))')
+        except sqlite3.OperationalError:
+            pass
+        
+        try:
+            conn.execute('ALTER TABLE products ADD COLUMN updated_at TEXT DEFAULT (datetime("now"))')
+        except sqlite3.OperationalError:
+            pass
+        
+        # 创建索引
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_products_userId ON products(userId)')
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_purchases_userId ON purchases(userId)')
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_sales_userId ON sales(userId)')
+        
+        self._set_version(conn, new_version)
+        conn.commit()
+        logger.info("数据库升级完成")
+    
+    @contextmanager
+    def get_connection(self):
+        """
+        获取数据库连接的上下文管理器
+        自动处理连接的获取、归还和错误重试
+        
+        Usage:
+            with pool.get_connection() as conn:
+                cursor = conn.execute("SELECT * FROM users")
+                results = cursor.fetchall()
+        """
+        conn = None
+        try:
+            conn = self._acquire_connection()
+            yield conn
+            conn.commit()  # 自动提交事务
+        except sqlite3.OperationalError as e:
+            if conn:
+                conn.rollback()  # 回滚事务
+            
+            # 处理 SQLITE_BUSY 错误
+            if "database is locked" in str(e).lower() or "database is locked" in str(e):
+                self._stats['busy_errors'] += 1
+                logger.warning(f"数据库锁定错误，将重试: {e}")
+                raise DatabaseBusyError(f"数据库暂时繁忙，请稍后重试: {e}")
+            else:
+                logger.error(f"数据库操作错误: {e}")
+                raise
+        except Exception as e:
+            if conn:
+                conn.rollback()
+            logger.error(f"数据库操作异常: {e}")
+            raise
+        finally:
+            if conn:
+                self._release_connection(conn)
+    
+    def _acquire_connection(self) -> sqlite3.Connection:
+        """
+        从连接池获取连接
+        
+        Returns:
+            SQLite 连接对象
+        """
+        start_time = time.time()
+        
+        while True:
+            # 尝试从池中获取连接
+            try:
+                conn = self._pool.get(timeout=0.1)
+                with self._lock:
+                    self._active_connections += 1
+                    self._stats['active_connections'] = self._active_connections
+                    self._stats['pool_size'] = self._pool.qsize()
+                return conn
+            except Empty:
+                # 池中没有可用连接
+                with self._lock:
+                    if self._active_connections < self.max_connections:
+                        # 创建新连接
+                        conn = self._create_connection()
+                        if conn:
+                            self._active_connections += 1
+                            self._stats['total_connections'] += 1
+                            self._stats['active_connections'] = self._active_connections
+                            return conn
+                
+                # 检查超时
+                elapsed = time.time() - start_time
+                if elapsed >= self.timeout:
+                    raise ConnectionTimeoutError(
+                        f"获取数据库连接超时 ({self.timeout}秒)，当前活跃连接: {self._active_connections}/{self.max_connections}"
+                    )
+                
+                # 等待一小段时间后重试
+                time.sleep(0.05)
+    
+    def _release_connection(self, conn: sqlite3.Connection):
+        """将连接归还到连接池"""
+        try:
+            # 重置连接状态
+            conn.rollback()  # 回滚任何未提交的事务
+            
+            with self._lock:
+                self._active_connections -= 1
+                self._stats['active_connections'] = self._active_connections
+                
+                # 检查连接是否仍然有效
+                try:
+                    conn.execute("SELECT 1")
+                except sqlite3.Error:
+                    # 连接已损坏，不归还到池中
+                    logger.warning("检测到损坏的连接，丢弃")
+                    return
+                
+                # 归还到池中
+                try:
+                    self._pool.put_nowait(conn)
+                    self._stats['pool_size'] = self._pool.qsize()
+                except:
+                    # 池已满，关闭连接
+                    conn.close()
+        except Exception as e:
+            logger.error(f"释放连接时出错: {e}")
+            try:
+                conn.close()
+            except:
+                pass
+    
+    def execute_with_retry(
+        self,
+        query: str,
+        params: tuple = (),
+        retry_attempts: Optional[int] = None
+    ) -> Any:
+        """
+        执行 SQL 查询，带重试机制
+        
+        Args:
+            query: SQL 查询语句
+            params: 查询参数
+            retry_attempts: 重试次数（默认使用类初始化时的值）
+        
+        Returns:
+            查询结果
+        """
+        if retry_attempts is None:
+            retry_attempts = self.retry_attempts
+        
+        last_error = None
+        
+        for attempt in range(retry_attempts):
+            try:
+                with self.get_connection() as conn:
+                    cursor = conn.execute(query, params)
+                    if query.strip().upper().startswith('SELECT'):
+                        return cursor.fetchall()
+                    else:
+                        return cursor.rowcount
+            except DatabaseBusyError as e:
+                last_error = e
+                self._stats['retry_count'] += 1
+                if attempt < retry_attempts - 1:
+                    wait_time = self.retry_delay * (2 ** attempt)  # 指数退避
+                    logger.info(f"重试查询 (尝试 {attempt + 1}/{retry_attempts}): {query[:50]}...")
+                    time.sleep(wait_time)
+                else:
+                    raise
+            except Exception as e:
+                logger.error(f"执行查询失败: {e}")
+                raise
+        
+        if last_error:
+            raise last_error
+    
+    def get_stats(self) -> dict:
+        """获取连接池统计信息"""
+        with self._lock:
+            return {
+                **self._stats,
+                'pool_size': self._pool.qsize(),
+                'active_connections': self._active_connections,
+                'max_connections': self.max_connections
+            }
+    
+    def close_all(self):
+        """关闭所有连接"""
+        logger.info("关闭所有数据库连接...")
+        while not self._pool.empty():
+            try:
+                conn = self._pool.get_nowait()
+                conn.close()
+            except:
+                pass
+        
+        with self._lock:
+            self._active_connections = 0
+            self._stats['active_connections'] = 0
+            self._stats['pool_size'] = 0
+
+
+# 全局连接池实例
+_pool: Optional[SQLiteConnectionPool] = None
+
+
+def init_database(
+    db_path: str = "data/agrisalecl.db",
+    max_connections: int = 10,
+    **kwargs
+) -> SQLiteConnectionPool:
+    """
+    初始化全局数据库连接池
+    
+    Args:
+        db_path: 数据库文件路径
+        max_connections: 最大连接数
+        **kwargs: 其他连接池参数
+    
+    Returns:
+        连接池实例
+    """
+    global _pool
+    if _pool is None:
+        _pool = SQLiteConnectionPool(db_path, max_connections, **kwargs)
+    return _pool
+
+
+def get_pool() -> SQLiteConnectionPool:
+    """
+    获取全局连接池实例
+    
+    Returns:
+        连接池实例
+    
+    Raises:
+        RuntimeError: 如果连接池未初始化
+    """
+    if _pool is None:
+        raise RuntimeError("数据库连接池未初始化，请先调用 init_database()")
+    return _pool
+
+
+# 自定义异常类
+class DatabaseBusyError(Exception):
+    """数据库繁忙错误"""
+    pass
+
+
+class ConnectionTimeoutError(Exception):
+    """连接超时错误"""
+    pass
+

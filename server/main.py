@@ -1,0 +1,205 @@
+"""
+FastAPI 应用主文件
+整合所有路由、中间件和配置
+"""
+
+import logging
+import os
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
+from fastapi.responses import JSONResponse
+
+from server.database import init_database, get_pool
+from server.middleware import setup_middleware
+from server.routers import (
+    auth,
+    users,
+    products,
+    purchases,
+    sales,
+    returns,
+    customers,
+    suppliers,
+    employees,
+    income,
+    remittance,
+    settings
+)
+
+# 配置日志
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# 从环境变量获取配置，如果没有则使用默认值
+DB_PATH = os.getenv("DB_PATH", "data/agrisalecl.db")
+DB_MAX_CONNECTIONS = int(os.getenv("DB_MAX_CONNECTIONS", "10"))
+DB_BUSY_TIMEOUT = int(os.getenv("DB_BUSY_TIMEOUT", "5000"))
+SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-this-in-production")
+HOST = os.getenv("HOST", "0.0.0.0")
+PORT = int(os.getenv("PORT", "8000"))
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    应用生命周期管理
+    在启动时初始化数据库，在关闭时清理资源
+    """
+    # 启动时执行
+    logger.info("正在启动应用...")
+    
+    # 初始化数据库连接池
+    try:
+        pool = init_database(
+            db_path=DB_PATH,
+            max_connections=DB_MAX_CONNECTIONS,
+            busy_timeout=DB_BUSY_TIMEOUT
+        )
+        logger.info(f"数据库连接池初始化成功: {DB_PATH}")
+        logger.info(f"最大连接数: {DB_MAX_CONNECTIONS}, 繁忙超时: {DB_BUSY_TIMEOUT}ms")
+    except Exception as e:
+        logger.error(f"数据库初始化失败: {e}", exc_info=True)
+        raise
+    
+    # 更新 JWT 密钥（如果从环境变量获取）
+    if SECRET_KEY != "your-secret-key-change-this-in-production":
+        from server.middleware import update_secret_key
+        update_secret_key(SECRET_KEY)
+        logger.info("JWT 密钥已从环境变量更新")
+    else:
+        logger.warning("⚠️  警告: 使用默认 JWT 密钥，生产环境请设置 SECRET_KEY 环境变量")
+    
+    yield
+    
+    # 关闭时执行
+    logger.info("正在关闭应用...")
+    try:
+        pool = get_pool()
+        pool.close()
+        logger.info("数据库连接池已关闭")
+    except Exception as e:
+        logger.error(f"关闭数据库连接池时出错: {e}")
+
+
+# 创建 FastAPI 应用实例
+app = FastAPI(
+    title="农资管理系统 API",
+    description="农资管理系统后端 API 服务",
+    version="2.3.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    lifespan=lifespan
+)
+
+# 设置中间件
+setup_middleware(app)
+
+# 注册路由
+app.include_router(auth.router)
+app.include_router(users.router)
+app.include_router(products.router)
+app.include_router(purchases.router)
+app.include_router(sales.router)
+app.include_router(returns.router)
+app.include_router(customers.router)
+app.include_router(suppliers.router)
+app.include_router(employees.router)
+app.include_router(income.router)
+app.include_router(remittance.router)
+app.include_router(settings.router)
+
+logger.info("所有路由已注册")
+
+
+@app.get("/", tags=["系统"])
+async def root():
+    """
+    根路径，返回 API 信息
+    """
+    return {
+        "name": "农资管理系统 API",
+        "version": "2.3.0",
+        "status": "running",
+        "docs": "/docs",
+        "redoc": "/redoc"
+    }
+
+
+@app.get("/health", tags=["系统"])
+async def health_check():
+    """
+    健康检查端点
+    用于监控系统状态
+    """
+    try:
+        # 检查数据库连接
+        pool = get_pool()
+        with pool.get_connection() as conn:
+            conn.execute("SELECT 1").fetchone()
+        
+        return JSONResponse(
+            status_code=200,
+            content={
+                "status": "healthy",
+                "database": "connected",
+                "version": "2.3.0"
+            }
+        )
+    except Exception as e:
+        logger.error(f"健康检查失败: {e}")
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "unhealthy",
+                "database": "disconnected",
+                "error": str(e)
+            }
+        )
+
+
+@app.get("/api/info", tags=["系统"])
+async def api_info():
+    """
+    获取 API 信息
+    """
+    return {
+        "name": "农资管理系统 API",
+        "version": "2.3.0",
+        "description": "农资管理系统后端 API 服务",
+        "endpoints": {
+            "auth": "/api/auth",
+            "users": "/api/users",
+            "products": "/api/products",
+            "purchases": "/api/purchases",
+            "sales": "/api/sales",
+            "returns": "/api/returns",
+            "customers": "/api/customers",
+            "suppliers": "/api/suppliers",
+            "employees": "/api/employees",
+            "income": "/api/income",
+            "remittance": "/api/remittance",
+            "settings": "/api/settings"
+        },
+        "docs": "/docs",
+        "redoc": "/redoc"
+    }
+
+
+if __name__ == "__main__":
+    import uvicorn
+    
+    logger.info(f"启动服务器: {HOST}:{PORT}")
+    logger.info(f"数据库路径: {DB_PATH}")
+    logger.info(f"API 文档: http://{HOST}:{PORT}/docs")
+    
+    uvicorn.run(
+        "server.main:app",
+        host=HOST,
+        port=PORT,
+        reload=True,  # 开发模式自动重载
+        log_level="info"
+    )
+
