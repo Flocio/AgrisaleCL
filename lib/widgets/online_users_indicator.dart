@@ -1,5 +1,5 @@
-/// 在线用户指示器组件
-/// 显示当前在线用户数量和列表
+/// 在线设备指示器组件
+/// 显示当前账号的在线设备数量和列表
 
 import 'package:flutter/material.dart';
 import '../services/user_status_service.dart';
@@ -38,7 +38,7 @@ class _OnlineUsersIndicatorState extends State<OnlineUsersIndicator> {
     _startListening();
   }
 
-  /// 加载用户设置（是否显示在线用户提示）
+  /// 加载用户设置（是否显示在线设备提示）
   Future<void> _loadSettings() async {
     try {
       final settings = await _settingsRepo.getUserSettings();
@@ -89,18 +89,18 @@ class _OnlineUsersIndicatorState extends State<OnlineUsersIndicator> {
     super.dispose();
   }
 
-  /// 显示在线用户详情对话框
+  /// 显示在线设备详情对话框
   void _showOnlineUsersDialog() {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('在线用户 (${_onlineUsersCount})'),
+        title: Text('在线设备 (${_onlineUsersCount})'),
         content: SizedBox(
           width: double.maxFinite,
           child: _onlineUsers.isEmpty
               ? Center(
                   child: Text(
-                    '暂无其他在线用户',
+                    '暂无在线设备',
                     style: TextStyle(color: Colors.grey),
                   ),
                 )
@@ -112,14 +112,13 @@ class _OnlineUsersIndicatorState extends State<OnlineUsersIndicator> {
                     return ListTile(
                       leading: CircleAvatar(
                         backgroundColor: Colors.green,
-                        child: Text(
-                          user.username.isNotEmpty
-                              ? user.username[0].toUpperCase()
-                              : '?',
-                          style: TextStyle(color: Colors.white),
+                        child: Icon(
+                          Icons.devices,
+                          color: Colors.white,
+                          size: 20,
                         ),
                       ),
-                      title: Text(user.username),
+                      title: Text('设备 ${index + 1}'),
                       subtitle: user.currentAction != null
                           ? Text(
                               user.currentAction!,
@@ -156,7 +155,7 @@ class _OnlineUsersIndicatorState extends State<OnlineUsersIndicator> {
 
   @override
   Widget build(BuildContext context) {
-    // 如果不显示在线用户提示，返回空组件
+    // 如果不显示在线设备提示，返回空组件
     if (!_showOnlineUsers) {
       return SizedBox.shrink();
     }
@@ -193,7 +192,7 @@ class _OnlineUsersIndicatorState extends State<OnlineUsersIndicator> {
       );
     }
 
-    // 显示在线用户数量
+    // 显示在线设备数量
     return Positioned(
       top: 8,
       right: 8,
@@ -218,13 +217,13 @@ class _OnlineUsersIndicatorState extends State<OnlineUsersIndicator> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
-                Icons.people,
+                Icons.devices,
                 size: 16,
                 color: Colors.white,
               ),
               SizedBox(width: 4),
               Text(
-                '在线: $_onlineUsersCount',
+                '设备: $_onlineUsersCount',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 12,

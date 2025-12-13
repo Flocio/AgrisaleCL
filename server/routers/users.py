@@ -81,15 +81,15 @@ async def get_online_users(
     current_user: dict = Depends(get_current_user)
 ):
     """
-    获取当前在线用户列表
+    获取当前账号的在线设备列表
     
-    只返回在超时时间内的活跃用户
+    只返回当前账号在超时时间内的活跃设备
     
     Args:
         current_user: 当前用户信息（从 Token 获取）
     
     Returns:
-        在线用户列表
+        在线设备列表
     """
     pool = get_pool()
     current_user_id = current_user["user_id"]
@@ -99,26 +99,23 @@ async def get_online_users(
             # 先清理过期的在线用户
             _cleanup_expired_users(conn)
             
-            # 查询所有在线用户（在超时时间内的）
+            # 查询当前账号的所有在线设备（在超时时间内的）
             # 使用 SQLite 的 datetime 函数计算超时阈值
+            # 只返回当前用户ID的在线设备
             cursor = conn.execute(
                 """
                 SELECT userId, username, last_heartbeat, current_action
                 FROM online_users
-                WHERE datetime(last_heartbeat) > datetime('now', '-' || ? || ' seconds')
+                WHERE userId = ? AND datetime(last_heartbeat) > datetime('now', '-' || ? || ' seconds')
                 ORDER BY last_heartbeat DESC
                 """,
-                (ONLINE_TIMEOUT_SECONDS,)
+                (current_user_id, ONLINE_TIMEOUT_SECONDS)
             )
             rows = cursor.fetchall()
             
             # 转换为响应模型
             online_users = []
             for row in rows:
-                # 排除当前用户自己（可选，根据需要决定是否显示自己）
-                # if row[0] == current_user_id:
-                #     continue
-                
                 online_user = OnlineUserResponse(
                     userId=row[0],
                     username=row[1],
@@ -127,11 +124,11 @@ async def get_online_users(
                 )
                 online_users.append(online_user.model_dump())
             
-            logger.info(f"获取在线用户列表: {len(online_users)} 个用户在线")
+            logger.info(f"获取在线设备列表: 用户 {current_user_id} 有 {len(online_users)} 个设备在线")
             
             return BaseResponse(
                 success=True,
-                message="获取在线用户列表成功",
+                message="获取在线设备列表成功",
                 data={
                     "online_users": online_users,
                     "count": len(online_users)
@@ -151,42 +148,47 @@ async def get_online_users_count(
     current_user: dict = Depends(get_current_user)
 ):
     """
-    获取当前在线用户数量（轻量级接口）
+    获取当前账号的在线设备数量（轻量级接口）
+    
+    只返回当前账号在超时时间内的活跃设备数量
     
     Args:
         current_user: 当前用户信息（从 Token 获取）
     
     Returns:
-        在线用户数量
+        在线设备数量
     """
     pool = get_pool()
+    current_user_id = current_user["user_id"]
     
     try:
         with pool.get_connection() as conn:
             # 先清理过期的在线用户
             _cleanup_expired_users(conn)
             
-            # 统计在线用户数量
+            # 统计当前账号的在线设备数量
             cursor = conn.execute(
                 """
                 SELECT COUNT(*) FROM online_users
-                WHERE datetime(last_heartbeat) > datetime('now', '-' || ? || ' seconds')
+                WHERE userId = ? AND datetime(last_heartbeat) > datetime('now', '-' || ? || ' seconds')
                 """,
-                (ONLINE_TIMEOUT_SECONDS,)
+                (current_user_id, ONLINE_TIMEOUT_SECONDS)
             )
             count = cursor.fetchone()[0]
             
+            logger.info(f"获取在线设备数量: 用户 {current_user_id} 有 {count} 个设备在线")
+            
             return BaseResponse(
                 success=True,
-                message="获取在线用户数量成功",
+                message="获取在线设备数量成功",
                 data={"count": count}
             )
             
     except Exception as e:
-        logger.error(f"获取在线用户数量失败: {e}", exc_info=True)
+        logger.error(f"获取在线设备数量失败: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"获取在线用户数量失败: {str(e)}"
+            detail=f"获取在线设备数量失败: {str(e)}"
         )
 
 

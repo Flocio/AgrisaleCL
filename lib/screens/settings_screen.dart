@@ -58,7 +58,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _apiKeyController = TextEditingController();
   bool _obscureApiKey = true;
   
-  // 在线用户提示开关
+  // 在线设备提示开关
   bool _showOnlineUsers = true;
   
   final List<String> _availableModels = [
@@ -113,7 +113,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  Future<void> _saveSettings() async {
+  Future<bool> _saveSettings() async {
     try {
       await _settingsRepo.updateUserSettings(
         UserSettingsUpdate(
@@ -126,6 +126,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           showOnlineUsers: _showOnlineUsers ? 1 : 0,
         ),
       );
+      return true; // 保存成功
     } on ApiError catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -135,6 +136,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         );
       }
+      return false; // 保存失败
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -144,20 +146,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         );
       }
+      return false; // 保存失败
     }
   }
 
-  // 自动保存设置（不显示提示）
+  // 自动保存设置（不显示成功提示，失败时显示错误提示）
   Future<void> _autoSaveSettings() async {
-    await _saveSettings();
+    final success = await _saveSettings();
+    // 如果保存失败，重新从服务器加载设置以恢复一致状态
+    if (!success) {
+      await _loadModelSettings();
+    }
   }
 
-  // 手动保存设置（显示提示）
+  // 手动保存设置（显示成功提示）
   Future<void> _manualSaveSettings() async {
-    await _saveSettings();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('设置已保存')),
-    );
+    final success = await _saveSettings();
+    if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('设置已保存')),
+      );
+    }
+    // 如果保存失败，重新从服务器加载设置以恢复一致状态
+    if (!success) {
+      await _loadModelSettings();
+    }
   }
 
   Future<void> _changePassword() async {
@@ -1096,8 +1109,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                         Divider(),
                         SwitchListTile(
-                          title: Text('显示在线用户提示'),
-                          subtitle: Text('在主界面显示在线用户数量和详情'),
+                          title: Text('显示在线设备提示'),
+                          subtitle: Text('在主界面显示该账号的在线设备数量'),
                           value: _showOnlineUsers,
                           onChanged: (value) {
                             setState(() {
@@ -1106,7 +1119,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             // 自动保存设置
                             _autoSaveSettings();
                           },
-                          secondary: Icon(Icons.people, color: Colors.blue),
+                          secondary: Icon(Icons.devices, color: Colors.blue),
                         ),
                       ],
                     ),
