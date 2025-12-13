@@ -2,6 +2,7 @@
 /// 处理用户心跳、在线用户列表、操作状态更新等功能
 
 import 'dart:async';
+import 'dart:io';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/api_response.dart';
 import '../models/api_error.dart';
@@ -14,6 +15,7 @@ class OnlineUser {
   final String username;
   final String lastHeartbeat;
   final String? currentAction;
+  final String? platform;
 
   OnlineUser({
     required this.userId,
@@ -21,6 +23,7 @@ class OnlineUser {
     required this.username,
     required this.lastHeartbeat,
     this.currentAction,
+    this.platform,
   });
 
   factory OnlineUser.fromJson(Map<String, dynamic> json) {
@@ -30,6 +33,7 @@ class OnlineUser {
       username: json['username'] as String,
       lastHeartbeat: json['last_heartbeat'] as String? ?? json['lastHeartbeat'] as String,
       currentAction: json['current_action'] as String? ?? json['currentAction'] as String?,
+      platform: json['platform'] as String?,
     );
   }
 
@@ -164,6 +168,23 @@ class UserStatusService {
     _isRunning = false;
   }
 
+  /// 获取设备平台信息
+  String _getPlatform() {
+    if (Platform.isAndroid) {
+      return 'Android';
+    } else if (Platform.isIOS) {
+      return 'iOS';
+    } else if (Platform.isMacOS) {
+      return 'macOS';
+    } else if (Platform.isWindows) {
+      return 'Windows';
+    } else if (Platform.isLinux) {
+      return 'Linux';
+    } else {
+      return 'Unknown';
+    }
+  }
+
   /// 更新心跳
   /// 
   /// [action] 当前操作描述（可选）
@@ -171,14 +192,16 @@ class UserStatusService {
     try {
       _currentAction = action;
       
-      // 获取设备ID
+      // 获取设备ID和平台信息
       final deviceId = await _getDeviceId();
+      final platform = _getPlatform();
       
       await _apiService.post(
         '/api/users/heartbeat',
         body: {
           'device_id': deviceId,
           if (action != null) 'current_action': action,
+          'platform': platform,
         },
         fromJsonT: (json) => json,
       );

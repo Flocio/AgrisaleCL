@@ -100,6 +100,11 @@ class ChangePasswordRequest(BaseModel):
     """修改密码请求"""
     old_password: str = Field(..., min_length=1, description="当前密码")
     new_password: str = Field(..., min_length=3, max_length=72, description="新密码（bcrypt 限制最大 72 字节）")
+
+
+class LogoutRequest(BaseModel):
+    """登出请求"""
+    device_id: Optional[str] = Field(None, max_length=100, description="设备ID（可选，如果提供则只删除该设备的记录）")
     
     @validator('new_password')
     def validate_password_length(cls, v):
@@ -549,6 +554,7 @@ class OnlineUserUpdate(BaseModel):
     """更新在线用户状态请求"""
     device_id: Optional[str] = Field(None, max_length=100, description="设备ID（用于区分同一用户的不同设备）")
     current_action: Optional[str] = Field(None, max_length=200, description="当前操作描述")
+    platform: Optional[str] = Field(None, max_length=50, description="设备平台（如：Android、iOS、macOS、Windows、Linux）")
 
 
 class OnlineUserResponse(BaseModel):
@@ -558,6 +564,7 @@ class OnlineUserResponse(BaseModel):
     username: str
     last_heartbeat: str
     current_action: Optional[str] = None
+    platform: Optional[str] = None
 
     model_config = {"from_attributes": True}
 

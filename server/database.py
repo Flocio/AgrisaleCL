@@ -128,11 +128,11 @@ class SQLiteConnectionPool:
                     # 首次创建数据库
                     logger.info("首次创建数据库，执行初始化脚本...")
                     self._create_tables(conn)
-                    self._set_version(conn, 13)
+                    self._set_version(conn, 14)
                 else:
                     # 升级数据库
                     logger.info(f"数据库版本: {version}, 检查是否需要升级...")
-                    self._upgrade_database(conn, version, 13)
+                    self._upgrade_database(conn, version, 14)
         except Exception as e:
             logger.error(f"数据库初始化失败: {e}")
             raise
@@ -322,6 +322,7 @@ class SQLiteConnectionPool:
                 username TEXT NOT NULL,
                 last_heartbeat TEXT DEFAULT (datetime('now')),
                 current_action TEXT,
+                platform TEXT,
                 PRIMARY KEY (userId, deviceId),
                 FOREIGN KEY (userId) REFERENCES users (id) ON DELETE CASCADE)
         ''')
@@ -451,6 +452,24 @@ class SQLiteConnectionPool:
         except sqlite3.OperationalError:
             pass
         
+        # 版本 14: 添加 platform 字段到 online_users 表
+        if old_version < 14:
+            logger.info("升级到版本 14: 添加 platform 字段到 online_users 表")
+            try:
+                # 检查表是否存在
+                cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='online_users'")
+                if cursor.fetchone():
+                    # 尝试添加 platform 字段
+                    try:
+                        conn.execute('ALTER TABLE online_users ADD COLUMN platform TEXT')
+                        logger.info("已添加 platform 字段到 online_users 表")
+                    except sqlite3.OperationalError:
+                        # 字段可能已存在，忽略错误
+                        logger.debug("platform 字段可能已存在")
+            except Exception as e:
+                logger.error(f"升级 online_users 表失败: {e}", exc_info=True)
+                raise
+        
         # 版本 13: 修改 online_users 表支持多设备
         if old_version < 13:
             logger.info("升级到版本 13: 修改 online_users 表支持多设备")
@@ -470,6 +489,7 @@ class SQLiteConnectionPool:
                         username TEXT NOT NULL,
                         last_heartbeat TEXT DEFAULT (datetime('now')),
                         current_action TEXT,
+                        platform TEXT,
                         PRIMARY KEY (userId, deviceId),
                         FOREIGN KEY (userId) REFERENCES users (id) ON DELETE CASCADE)
                 ''')

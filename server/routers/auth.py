@@ -22,6 +22,7 @@ from server.models import (
     UserResponse,
     UserInfo,
     ChangePasswordRequest,
+    LogoutRequest,
     BaseResponse,
     ErrorResponse
 )
@@ -92,14 +93,7 @@ async def register(user_data: UserCreate):
             }
             token = create_access_token(data=token_data)
             
-            # 更新在线用户表（使用默认设备ID，客户端会在心跳时更新）
-            conn.execute(
-                """
-                INSERT OR REPLACE INTO online_users (userId, deviceId, username, last_heartbeat, current_action)
-                VALUES (?, ?, ?, datetime('now'), '注册')
-                """,
-                (user_id, 'default', user_data.username)
-            )
+            # 不在这里创建在线用户记录，让客户端在心跳时创建（避免出现默认设备）
             conn.commit()
             
             # 构建响应
@@ -176,13 +170,11 @@ async def login(login_data: UserLogin):
                 (user_id,)
             )
             
-            # 更新在线用户表（使用默认设备ID，客户端会在心跳时更新）
+            # 不在这里创建在线用户记录，让客户端在心跳时创建（避免出现默认设备）
+            # 同时清理可能存在的旧默认设备记录
             conn.execute(
-                """
-                INSERT OR REPLACE INTO online_users (userId, deviceId, username, last_heartbeat, current_action)
-                VALUES (?, ?, ?, datetime('now'), '登录')
-                """,
-                (user_id, 'default', username)
+                "DELETE FROM online_users WHERE userId = ? AND deviceId = 'default'",
+                (user_id,)
             )
             
             conn.commit()
@@ -226,11 +218,15 @@ async def login(login_data: UserLogin):
 
 
 @router.post("/logout", response_model=BaseResponse)
-async def logout(current_user: dict = Depends(get_current_user)):
+async def logout(
+    logout_data: Optional[LogoutRequest] = None,
+    current_user: dict = Depends(get_current_user)
+):
     """
-    用户登出
+    用户登出（只删除当前设备的记录）
     
     Args:
+        logout_data: 可选的登出数据（包含 device_id）
         current_user: 当前用户信息（从 Token 获取）
     
     Returns:
@@ -240,16 +236,24 @@ async def logout(current_user: dict = Depends(get_current_user)):
     user_id = current_user["user_id"]
     username = current_user["username"]
     
+    # 获取设备ID（如果客户端提供了）
+    device_id = logout_data.device_id if logout_data and logout_data.device_id else None
+    
     try:
         with pool.get_connection() as conn:
-            # 从在线用户表中删除
-            conn.execute(
-                "DELETE FROM online_users WHERE userId = ?",
-                (user_id,)
-            )
-            conn.commit()
+            if device_id:
+                # 只删除当前设备的记录
+                conn.execute(
+                    "DELETE FROM online_users WHERE userId = ? AND deviceId = ?",
+                    (user_id, device_id)
+                )
+                logger.info(f"用户登出: {username} (ID: {user_id}), 设备: {device_id}")
+            else:
+                # 如果没有提供设备ID，不删除任何记录（让心跳超时自动清理）
+                # 这样可以避免误删其他设备的记录
+                logger.info(f"用户登出: {username} (ID: {user_id}), 未提供设备ID，等待心跳超时")
             
-            logger.info(f"用户登出: {username} (ID: {user_id})")
+            conn.commit()
             
             return BaseResponse(
                 success=True,

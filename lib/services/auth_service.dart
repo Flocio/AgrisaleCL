@@ -184,9 +184,19 @@ class AuthService {
   /// 用户登出
   Future<void> logout() async {
     try {
-      // 调用服务器登出接口
+      // 获取设备ID（如果可用）
+      String? deviceId;
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        deviceId = prefs.getString('device_id');
+      } catch (e) {
+        // 忽略错误，继续登出
+      }
+      
+      // 调用服务器登出接口（发送设备ID，只删除当前设备的记录）
       await _apiService.post(
         '/api/auth/logout',
+        body: deviceId != null ? {'device_id': deviceId} : null,
         fromJsonT: (json) => json,
       );
     } catch (e) {

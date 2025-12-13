@@ -113,6 +113,10 @@ class _OnlineUsersIndicatorState extends State<OnlineUsersIndicator> {
                   itemCount: _onlineUsers.length,
                   itemBuilder: (context, index) {
                     final user = _onlineUsers[index];
+                    final platformText = user.platform ?? '未知平台';
+                    final subtitleText = user.currentAction != null
+                        ? user.currentAction!
+                        : '在线';
                     return ListTile(
                       leading: CircleAvatar(
                         backgroundColor: Colors.green,
@@ -123,21 +127,27 @@ class _OnlineUsersIndicatorState extends State<OnlineUsersIndicator> {
                         ),
                       ),
                       title: Text('设备 ${index + 1}'),
-                      subtitle: user.currentAction != null
-                          ? Text(
-                              user.currentAction!,
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey[600],
-                              ),
-                            )
-                          : Text(
-                              '在线',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey[600],
-                              ),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            platformText,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.blue[700],
+                              fontWeight: FontWeight.w500,
                             ),
+                          ),
+                          SizedBox(height: 2),
+                          Text(
+                            subtitleText,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                        ],
+                      ),
                       trailing: Icon(
                         Icons.circle,
                         size: 8,

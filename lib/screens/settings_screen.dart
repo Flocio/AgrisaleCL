@@ -675,13 +675,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
     
     if (confirm == true) {
       try {
-        // 停止心跳服务（必须在清除 Token 之前，因为需要 Token 来调用服务器接口）
-        UserStatusService().stopHeartbeat();
+        // 先发送一次心跳，确保设备ID已同步到服务器
+        // 然后停止心跳服务（必须在清除 Token 之前，因为需要 Token 来调用服务器接口）
+        final userStatusService = UserStatusService();
+        try {
+          // 发送最后一次心跳，确保设备ID在服务器端
+          await userStatusService.updateHeartbeat();
+        } catch (e) {
+          print('发送最后心跳失败: $e');
+        }
+        userStatusService.stopHeartbeat();
         
         // 停止自动备份服务
         await AutoBackupService().stopAutoBackup();
         
         // 调用 AuthService 的 logout 方法，清除 Token 和用户名
+        // logout 方法会发送 device_id 到服务器，只删除当前设备的记录
         await AuthService().logout();
         
         // 跳转到登录界面
@@ -883,7 +892,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 SizedBox(height: 16),
                 
-                // 系统设置卡片
+                // 在线设备卡片
                 Card(
                   child: Padding(
                     padding: EdgeInsets.all(16.0),
@@ -891,7 +900,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '系统设置',
+                          '在线设备',
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,

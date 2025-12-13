@@ -50,16 +50,17 @@ async def update_heartbeat(
     current_action = action_data.current_action if action_data else None
     # 生成或使用设备ID（如果客户端没有提供，则使用默认值）
     device_id = action_data.device_id if action_data and action_data.device_id else "default"
+    platform = action_data.platform if action_data and action_data.platform else None
     
     try:
         with pool.get_connection() as conn:
             # 更新或插入在线用户记录（支持多设备）
             conn.execute(
                 """
-                INSERT OR REPLACE INTO online_users (userId, deviceId, username, last_heartbeat, current_action)
-                VALUES (?, ?, ?, datetime('now'), ?)
+                INSERT OR REPLACE INTO online_users (userId, deviceId, username, last_heartbeat, current_action, platform)
+                VALUES (?, ?, ?, datetime('now'), ?, ?)
                 """,
-                (user_id, device_id, username, current_action)
+                (user_id, device_id, username, current_action, platform)
             )
             conn.commit()
             
@@ -106,7 +107,7 @@ async def get_online_users(
             # 只返回当前用户ID的在线设备
             cursor = conn.execute(
                 """
-                SELECT userId, deviceId, username, last_heartbeat, current_action
+                SELECT userId, deviceId, username, last_heartbeat, current_action, platform
                 FROM online_users
                 WHERE userId = ? AND datetime(last_heartbeat) > datetime('now', '-' || ? || ' seconds')
                 ORDER BY last_heartbeat DESC
@@ -123,7 +124,8 @@ async def get_online_users(
                     deviceId=row[1],
                     username=row[2],
                     last_heartbeat=row[3],
-                    current_action=row[4]
+                    current_action=row[4],
+                    platform=row[5] if len(row) > 5 else None
                 )
                 online_users.append(online_user.model_dump())
             
