@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import '../repositories/product_repository.dart';
 import '../repositories/supplier_repository.dart';
 import '../repositories/customer_repository.dart';
@@ -138,13 +139,17 @@ class AutoBackupService {
       final income = (results[7] as PaginatedResponse).items.map((i) => i.toJson()).toList();
       final remittance = (results[8] as PaginatedResponse).items.map((r) => r.toJson()).toList();
       
+      // 获取应用版本号
+      final packageInfo = await PackageInfo.fromPlatform();
+      final appVersion = packageInfo.version;
+      
       // 构建备份数据
       final backupData = {
         'backupInfo': {
           'type': 'auto_backup',
           'username': username,
           'backupTime': DateTime.now().toIso8601String(),
-          'version': '1.0.0',
+          'version': appVersion, // 从 package_info_plus 获取版本号
         },
         'data': {
           'products': products,
@@ -343,7 +348,7 @@ class AutoBackupService {
           'exportInfo': {
             'username': backupData['backupInfo']['username'] ?? '未知',
             'exportTime': backupData['backupInfo']['backupTime'] ?? DateTime.now().toIso8601String(),
-            'version': backupData['backupInfo']['version'] ?? '1.0.0',
+            'version': backupData['backupInfo']['version'] ?? (await PackageInfo.fromPlatform()).version,
           },
           'data': backupData['data'],
         };

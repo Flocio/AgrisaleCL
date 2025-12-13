@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
 from server.database import init_database, get_pool
+from server.constants import APP_VERSION
 from server.middleware import setup_middleware
 from server.routers import (
     auth,
@@ -92,7 +93,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="AgrisaleCL API",
     description="AgrisaleCL后端 API 服务",
-    version="1.0.0",
+    version=APP_VERSION,
     docs_url="/docs",
     redoc_url="/redoc",
     lifespan=lifespan
@@ -125,7 +126,7 @@ async def root():
     """
     return {
         "name": "AgrisaleCL API",
-        "version": "1.0.0",
+        "version": APP_VERSION,
         "status": "running",
         "docs": "/docs",
         "redoc": "/redoc"
@@ -171,7 +172,7 @@ async def api_info():
     """
     return {
         "name": "AgrisaleCL API",
-        "version": "1.0.0",
+        "version": APP_VERSION,
         "description": "AgrisaleCL后端 API 服务",
         "endpoints": {
             "auth": "/api/auth",

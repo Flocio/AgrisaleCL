@@ -4,6 +4,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'dart:convert';
 import 'dart:io';
 import '../widgets/footer_widget.dart';
@@ -255,7 +256,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'exportInfo': {
           'username': username,
           'exportTime': DateTime.now().toIso8601String(),
-          'version': '1.0.0', // 更新版本号
+          'version': (await PackageInfo.fromPlatform()).version, // 从 package_info_plus 获取版本号
         },
         'data': {
           'products': products,

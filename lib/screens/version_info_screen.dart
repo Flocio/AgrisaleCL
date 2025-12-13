@@ -341,13 +341,21 @@ class _VersionInfoScreenState extends State<VersionInfoScreen> {
                           ListTile(
                             leading: Icon(Icons.info_outline, color: Colors.blue),
                             title: Text('系统信息'),
-                            subtitle: Text('AgrisaleCL v1.0.0'),
+                            subtitle: FutureBuilder<PackageInfo>(
+                              future: PackageInfo.fromPlatform(),
+                              builder: (context, snapshot) {
+                                if (snapshot.hasData) {
+                                  return Text('AgrisaleCL v${snapshot.data!.version}');
+                                }
+                                return Text('AgrisaleCL v1.1.0'); // 后备显示
+                              },
+                            ),
                             trailing: Icon(Icons.arrow_forward_ios, size: 16),
                             onTap: () {
                               showAboutDialog(
                                 context: context,
                                 applicationName: 'AgrisaleCL',
-                                applicationVersion: 'v1.0.0',
+                                applicationVersion: _packageInfo != null ? 'v${_packageInfo!.version}' : 'v1.1.0',
                                 applicationIcon: Image.asset(
                                   'assets/images/background.png',
                                   width: 50,
