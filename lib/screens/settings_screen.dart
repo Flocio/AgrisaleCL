@@ -4,10 +4,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:sqflite/sqflite.dart';
 import 'dart:convert';
 import 'dart:io';
-import '../database_helper.dart';
 import '../widgets/footer_widget.dart';
 import '../services/auto_backup_service.dart';
 import '../repositories/settings_repository.dart';
@@ -586,237 +584,45 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         );
 
-        final db = await DatabaseHelper().database;
-        final userId = await DatabaseHelper().getCurrentUserId(username);
-        
-        if (userId == null) {
+        try {
+          // 通过 API 导入数据到服务器
+          final result = await _settingsRepo.importData(importData);
+          
+          Navigator.of(context).pop(); // 关闭加载对话框
+
+          final counts = result['counts'] as Map<String, dynamic>?;
+          final countsText = counts != null
+              ? '供应商: ${counts['suppliers']}, 客户: ${counts['customers']}, 员工: ${counts['employees']}, 产品: ${counts['products']}, 采购: ${counts['purchases']}, 销售: ${counts['sales']}, 退货: ${counts['returns']}, 进账: ${counts['income']}, 汇款: ${counts['remittance']}'
+              : '';
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('数据覆盖成功！\n$countsText'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 5),
+            ),
+          );
+
+          // 重新加载设置
+          _loadModelSettings();
+        } on ApiError catch (e) {
           Navigator.of(context).pop(); // 关闭加载对话框
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('用户信息错误')),
+            SnackBar(
+              content: Text('数据导入失败: ${e.message}'),
+              backgroundColor: Colors.red,
+            ),
           );
-          return;
+        } catch (e) {
+          Navigator.of(context).pop(); // 关闭加载对话框
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('数据导入失败: ${e.toString()}'),
+              backgroundColor: Colors.red,
+            ),
+          );
         }
 
-        // 在事务中执行数据恢复
-        await db.transaction((txn) async {
-          // 删除当前用户的业务数据（不包括 user_settings）
-          await txn.delete('products', where: 'userId = ?', whereArgs: [userId]);
-          await txn.delete('suppliers', where: 'userId = ?', whereArgs: [userId]);
-          await txn.delete('customers', where: 'userId = ?', whereArgs: [userId]);
-          await txn.delete('employees', where: 'userId = ?', whereArgs: [userId]);
-          await txn.delete('purchases', where: 'userId = ?', whereArgs: [userId]);
-          await txn.delete('sales', where: 'userId = ?', whereArgs: [userId]);
-          await txn.delete('returns', where: 'userId = ?', whereArgs: [userId]);
-          await txn.delete('income', where: 'userId = ?', whereArgs: [userId]);
-          await txn.delete('remittance', where: 'userId = ?', whereArgs: [userId]);
-          // 注意：不删除 user_settings，保留用户的个人设置和隐私数据
-
-          // 创建ID映射表来保持关联关系（旧ID -> 新ID）
-          Map<int, int> supplierIdMap = {};
-          Map<int, int> customerIdMap = {};
-          Map<int, int> productIdMap = {};
-          Map<int, int> employeeIdMap = {};
-
-          // 恢复suppliers数据
-          if (data['suppliers'] != null) {
-            for (var supplier in data['suppliers']) {
-              final supplierData = Map<String, dynamic>.from(supplier);
-              final originalId = supplierData['id'] as int;
-              supplierData.remove('id');
-              supplierData['userId'] = userId;
-              final newId = await txn.insert('suppliers', supplierData);
-              supplierIdMap[originalId] = newId;
-            }
-          }
-
-          // 恢复customers数据
-          if (data['customers'] != null) {
-            for (var customer in data['customers']) {
-              final customerData = Map<String, dynamic>.from(customer);
-              final originalId = customerData['id'] as int;
-              customerData.remove('id');
-              customerData['userId'] = userId;
-              final newId = await txn.insert('customers', customerData);
-              customerIdMap[originalId] = newId;
-            }
-          }
-
-          // 恢复employees数据
-          if (data['employees'] != null) {
-            for (var employee in data['employees']) {
-              final employeeData = Map<String, dynamic>.from(employee);
-              final originalId = employeeData['id'] as int;
-              employeeData.remove('id');
-              employeeData['userId'] = userId;
-              final newId = await txn.insert('employees', employeeData);
-              employeeIdMap[originalId] = newId;
-            }
-          }
-
-          // 恢复products数据
-          if (data['products'] != null) {
-            for (var product in data['products']) {
-              final productData = Map<String, dynamic>.from(product);
-              final originalId = productData['id'] as int;
-              productData.remove('id');
-              productData['userId'] = userId;
-              
-              // 更新supplierId关联关系
-              if (productData['supplierId'] != null) {
-                final originalSupplierId = productData['supplierId'] as int;
-                if (supplierIdMap.containsKey(originalSupplierId)) {
-                  productData['supplierId'] = supplierIdMap[originalSupplierId];
-                } else {
-                  productData['supplierId'] = null;
-                }
-              }
-              
-              final newId = await txn.insert('products', productData);
-              productIdMap[originalId] = newId;
-            }
-          }
-
-          // 恢复purchases数据
-          if (data['purchases'] != null) {
-            for (var purchase in data['purchases']) {
-              final purchaseData = Map<String, dynamic>.from(purchase);
-              purchaseData.remove('id');
-              purchaseData['userId'] = userId;
-              
-              // 更新supplierId关联关系
-              if (purchaseData['supplierId'] != null) {
-                final originalSupplierId = purchaseData['supplierId'] as int;
-                if (supplierIdMap.containsKey(originalSupplierId)) {
-                  purchaseData['supplierId'] = supplierIdMap[originalSupplierId];
-                } else {
-                  purchaseData['supplierId'] = null;
-                }
-              }
-              
-              await txn.insert('purchases', purchaseData);
-            }
-          }
-
-          // 恢复sales数据
-          if (data['sales'] != null) {
-            for (var sale in data['sales']) {
-              final saleData = Map<String, dynamic>.from(sale);
-              saleData.remove('id');
-              saleData['userId'] = userId;
-              
-              // 更新customerId关联关系
-              if (saleData['customerId'] != null) {
-                final originalCustomerId = saleData['customerId'] as int;
-                if (customerIdMap.containsKey(originalCustomerId)) {
-                  saleData['customerId'] = customerIdMap[originalCustomerId];
-                } else {
-                  saleData['customerId'] = null;
-                }
-              }
-              
-              await txn.insert('sales', saleData);
-            }
-          }
-
-          // 恢复returns数据
-          if (data['returns'] != null) {
-            for (var returnItem in data['returns']) {
-              final returnData = Map<String, dynamic>.from(returnItem);
-              returnData.remove('id');
-              returnData['userId'] = userId;
-              
-              // 更新customerId关联关系
-              if (returnData['customerId'] != null) {
-                final originalCustomerId = returnData['customerId'] as int;
-                if (customerIdMap.containsKey(originalCustomerId)) {
-                  returnData['customerId'] = customerIdMap[originalCustomerId];
-                } else {
-                  returnData['customerId'] = null;
-                }
-              }
-              
-              await txn.insert('returns', returnData);
-            }
-          }
-
-          // 恢复income数据
-          if (data['income'] != null) {
-            for (var incomeItem in data['income']) {
-              final incomeData = Map<String, dynamic>.from(incomeItem);
-              incomeData.remove('id');
-              incomeData['userId'] = userId;
-              
-              // 更新customerId关联关系
-              if (incomeData['customerId'] != null) {
-                final originalCustomerId = incomeData['customerId'] as int;
-                if (customerIdMap.containsKey(originalCustomerId)) {
-                  incomeData['customerId'] = customerIdMap[originalCustomerId];
-                } else {
-                  incomeData['customerId'] = null;
-                }
-              }
-              
-              // 更新employeeId关联关系
-              if (incomeData['employeeId'] != null) {
-                final originalEmployeeId = incomeData['employeeId'] as int;
-                if (employeeIdMap.containsKey(originalEmployeeId)) {
-                  incomeData['employeeId'] = employeeIdMap[originalEmployeeId];
-                } else {
-                  incomeData['employeeId'] = null;
-                }
-              }
-              
-              await txn.insert('income', incomeData);
-            }
-          }
-
-          // 恢复remittance数据
-          if (data['remittance'] != null) {
-            for (var remittanceItem in data['remittance']) {
-              final remittanceData = Map<String, dynamic>.from(remittanceItem);
-              remittanceData.remove('id');
-              remittanceData['userId'] = userId;
-              
-              // 更新supplierId关联关系
-              if (remittanceData['supplierId'] != null) {
-                final originalSupplierId = remittanceData['supplierId'] as int;
-                if (supplierIdMap.containsKey(originalSupplierId)) {
-                  remittanceData['supplierId'] = supplierIdMap[originalSupplierId];
-                } else {
-                  remittanceData['supplierId'] = null;
-                }
-              }
-              
-              // 更新employeeId关联关系
-              if (remittanceData['employeeId'] != null) {
-                final originalEmployeeId = remittanceData['employeeId'] as int;
-                if (employeeIdMap.containsKey(originalEmployeeId)) {
-                  remittanceData['employeeId'] = employeeIdMap[originalEmployeeId];
-                } else {
-                  remittanceData['employeeId'] = null;
-                }
-              }
-              
-              await txn.insert('remittance', remittanceData);
-            }
-          }
-
-          // 用户设置（user_settings）不导入
-          // 理由：用户设置包含个人隐私数据（API Key）和个人偏好
-          //       与业务数据无关，应该保留当前设置
-        });
-
-        Navigator.of(context).pop(); // 关闭加载对话框
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('数据覆盖成功！'),
-            backgroundColor: Colors.green,
-          ),
-        );
-
-        // 重新加载设置
-        _loadModelSettings();
 
       } else {
         ScaffoldMessenger.of(context).showSnackBar(

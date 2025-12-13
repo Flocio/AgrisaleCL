@@ -316,5 +316,33 @@ class SettingsRepository {
       UserSettingsUpdate(showOnlineUsers: enabled ? 1 : 0),
     );
   }
+
+  /// 批量导入数据（覆盖模式）
+  /// 
+  /// [importData] 导入数据（包含 exportInfo 和 data）
+  /// 
+  /// 返回导入结果统计
+  Future<Map<String, dynamic>> importData(Map<String, dynamic> importData) async {
+    try {
+      final response = await _apiService.post<Map<String, dynamic>>(
+        '/api/settings/import-data',
+        body: importData,
+        fromJsonT: (json) => json as Map<String, dynamic>,
+      );
+
+      if (response.isSuccess && response.data != null) {
+        return response.data!;
+      } else {
+        throw ApiError(
+          message: response.message,
+          errorCode: response.errorCode,
+        );
+      }
+    } on ApiError {
+      rethrow;
+    } catch (e) {
+      throw ApiError.unknown('数据导入失败', e);
+    }
+  }
 }
 
