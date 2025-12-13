@@ -105,14 +105,6 @@ class ChangePasswordRequest(BaseModel):
 class LogoutRequest(BaseModel):
     """登出请求"""
     device_id: Optional[str] = Field(None, max_length=100, description="设备ID（可选，如果提供则只删除该设备的记录）")
-    
-    @validator('new_password')
-    def validate_password_length(cls, v):
-        """验证密码字节长度不超过 72 字节"""
-        password_bytes = v.encode('utf-8')
-        if len(password_bytes) > 72:
-            raise ValueError('密码长度不能超过 72 字节（UTF-8 编码）')
-        return v
 
 
 # ==================== 产品相关模型 ====================

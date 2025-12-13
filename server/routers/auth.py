@@ -5,6 +5,7 @@
 
 import logging
 from datetime import datetime
+from typing import Optional
 from fastapi import APIRouter, HTTPException, status, Depends
 from fastapi.security import HTTPAuthorizationCredentials
 
