@@ -78,52 +78,52 @@ class _TotalSalesReportScreenState extends State<TotalSalesReportScreen> {
       final returnsResponse = results[1] as PaginatedResponse<Return>;
       final customers = results[2] as List<Customer>;
       final productsResponse = results[3] as PaginatedResponse<Product>;
-      
-      // 合并销售和退货数据
-      List<Map<String, dynamic>> combinedRecords = [];
-      
-      // 添加销售数据（正值）
+
+    // 合并销售和退货数据
+    List<Map<String, dynamic>> combinedRecords = [];
+    
+    // 添加销售数据（正值）
       for (var sale in salesResponse.items) {
-        combinedRecords.add({
+      combinedRecords.add({
           'date': sale.saleDate,
           'productName': sale.productName,
           'quantity': sale.quantity,
           'customerId': sale.customerId,
           'totalPrice': sale.totalSalePrice,
           'note': sale.note,
-          'type': '销售',
-          'value': 1 // 正值标记
-        });
-      }
-      
-      // 添加退货数据（负值）
+        'type': '销售',
+        'value': 1 // 正值标记
+      });
+    }
+    
+    // 添加退货数据（负值）
       for (var returnItem in returnsResponse.items) {
-        combinedRecords.add({
+      combinedRecords.add({
           'date': returnItem.returnDate,
           'productName': returnItem.productName,
           'quantity': returnItem.quantity,
           'customerId': returnItem.customerId,
           'totalPrice': returnItem.totalReturnPrice,
           'note': returnItem.note,
-          'type': '退货',
-          'value': -1 // 负值标记
-        });
-      }
+        'type': '退货',
+        'value': -1 // 负值标记
+      });
+    }
 
-      // 按日期排序
-      combinedRecords.sort((a, b) {
+    // 按日期排序
+    combinedRecords.sort((a, b) {
         final dateA = a['date'] != null ? DateTime.parse(a['date']) : DateTime(1970);
         final dateB = b['date'] != null ? DateTime.parse(b['date']) : DateTime(1970);
         return _isDescending ? dateB.compareTo(dateA) : dateA.compareTo(dateB);
-      });
+    });
 
-      setState(() {
-        _allCombinedRecords = combinedRecords;
-        _customers = customers;
+        setState(() {
+          _allCombinedRecords = combinedRecords;
+          _customers = customers;
         _products = productsResponse.items;
         _isLoading = false;
-        _applyFilters(); // 应用筛选
-      });
+          _applyFilters(); // 应用筛选
+        });
     } on ApiError catch (e) {
       setState(() {
         _isLoading = false;

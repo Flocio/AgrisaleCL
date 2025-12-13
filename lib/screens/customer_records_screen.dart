@@ -109,16 +109,16 @@ class _CustomerRecordsScreenState extends State<CustomerRecordsScreen> {
       // 按客户ID筛选
       List<Sale> sales = salesResponse.items.where((s) => s.customerId == widget.customerId).toList();
       List<Return> returns = returnsResponse.items.where((r) => r.customerId == widget.customerId).toList();
-      
+
       // 应用产品筛选
       if (_selectedProduct != null && _selectedProduct != '所有产品') {
         sales = sales.where((s) => s.productName == _selectedProduct).toList();
         returns = returns.where((r) => r.productName == _selectedProduct).toList();
       }
 
-      // 合并购买和退货记录
-      final combinedRecords = [
-        ...sales.map((sale) {
+        // 合并购买和退货记录
+        final combinedRecords = [
+          ...sales.map((sale) {
           final product = _products.firstWhere(
                 (p) => p.name == sale.productName,
             orElse: () => Product(
@@ -129,18 +129,18 @@ class _CustomerRecordsScreenState extends State<CustomerRecordsScreen> {
               unit: ProductUnit.kilogram,
               version: 1,
             ),
-          );
-          return {
+            );
+            return {
             'date': sale.saleDate ?? '',
-            'type': '购买',
+              'type': '购买',
             'productName': sale.productName,
             'unit': product.unit.value,
             'quantity': sale.quantity,
             'totalPrice': sale.totalSalePrice ?? 0.0,
             'note': sale.note ?? '',
-          };
-        }),
-        ...returns.map((returnItem) {
+            };
+          }),
+          ...returns.map((returnItem) {
           final product = _products.firstWhere(
                 (p) => p.name == returnItem.productName,
             orElse: () => Product(
@@ -151,41 +151,41 @@ class _CustomerRecordsScreenState extends State<CustomerRecordsScreen> {
               unit: ProductUnit.kilogram,
               version: 1,
             ),
-          );
-          return {
+            );
+            return {
             'date': returnItem.returnDate ?? '',
-            'type': '退货',
+              'type': '退货',
             'productName': returnItem.productName,
             'unit': product.unit.value,
             'quantity': returnItem.quantity,
             'totalPrice': returnItem.totalReturnPrice ?? 0.0,
             'note': returnItem.note ?? '',
-          };
-        }),
-      ];
+            };
+          }),
+        ];
 
-      // 按日期和类型排序
-      combinedRecords.sort((a, b) {
-        int dateComparison = _isDescending
-            ? (b['date'] as String).compareTo(a['date'] as String)
-            : (a['date'] as String).compareTo(b['date'] as String);
-        if (dateComparison != 0) return dateComparison;
+        // 按日期和类型排序
+        combinedRecords.sort((a, b) {
+          int dateComparison = _isDescending
+              ? (b['date'] as String).compareTo(a['date'] as String)
+              : (a['date'] as String).compareTo(b['date'] as String);
+          if (dateComparison != 0) return dateComparison;
 
-        // 如果日期相同，根据类型排序
-        if (_salesFirst) {
-          return a['type'] == '购买' ? -1 : 1;
-        } else {
-          return a['type'] == '退货' ? -1 : 1;
-        }
-      });
+          // 如果日期相同，根据类型排序
+          if (_salesFirst) {
+            return a['type'] == '购买' ? -1 : 1;
+          } else {
+            return a['type'] == '退货' ? -1 : 1;
+          }
+        });
 
       // 计算汇总数据
       _calculateSummary(combinedRecords);
 
-      setState(() {
-        _records = combinedRecords;
+        setState(() {
+          _records = combinedRecords;
         _isLoading = false;
-      });
+        });
     } on ApiError catch (e) {
       setState(() {
         _isLoading = false;

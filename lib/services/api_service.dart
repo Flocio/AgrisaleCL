@@ -1,6 +1,7 @@
 /// API 服务基础类
 /// 提供统一的 HTTP 请求、错误处理、重试机制
 
+import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -17,7 +18,8 @@ class ApiService {
   String baseUrl = 'http://192.168.10.12:8000'; // 默认值，树莓派 IP 地址
 
   /// 请求超时时间（秒）
-  static const int timeoutSeconds = 30;
+  /// 登录请求使用较短超时，避免用户等待过久
+  static const int timeoutSeconds = 15;
 
   /// 最大重试次数
   static const int maxRetries = 3;
@@ -121,8 +123,12 @@ class ApiService {
 
     while (attempts < maxRetries) {
       try {
+        print('API 请求尝试 ${attempts + 1}/$maxRetries'); // 调试日志
+        
         final response = await request()
             .timeout(Duration(seconds: timeoutSeconds));
+
+        print('API 响应状态码: ${response.statusCode}'); // 调试日志
 
         // 如果是 401 未授权，不重试
         if (response.statusCode == 401) {
@@ -131,6 +137,7 @@ class ApiService {
 
         // 如果是 5xx 服务器错误，重试
         if (response.statusCode >= 500 && attempts < maxRetries - 1) {
+          print('服务器错误，准备重试...'); // 调试日志
           await Future.delayed(Duration(milliseconds: retryDelayMs * (attempts + 1)));
           attempts++;
           continue;
@@ -139,8 +146,17 @@ class ApiService {
         return response;
       } on ApiError {
         rethrow;
+      } on TimeoutException catch (e) {
+        lastException = e;
+        print('请求超时 (尝试 ${attempts + 1}/$maxRetries)'); // 调试日志
+        if (attempts < maxRetries - 1) {
+          await Future.delayed(Duration(milliseconds: retryDelayMs * (attempts + 1)));
+          attempts++;
+          continue;
+        }
       } catch (e) {
         lastException = e is Exception ? e : Exception(e.toString());
+        print('请求异常: $e (尝试 ${attempts + 1}/$maxRetries)'); // 调试日志
         
         // 如果是超时或网络错误，重试
         if (attempts < maxRetries - 1) {
@@ -153,10 +169,13 @@ class ApiService {
 
     // 所有重试都失败
     if (lastException != null) {
-      if (lastException.toString().contains('TimeoutException')) {
-        throw ApiError.timeout();
+      if (lastException.toString().contains('TimeoutException') || 
+          lastException is TimeoutException) {
+        print('所有重试失败：超时'); // 调试日志
+        throw ApiError.timeout('连接超时，请检查网络连接和服务器地址');
       } else {
-        throw ApiError.network('网络请求失败', lastException);
+        print('所有重试失败：网络错误'); // 调试日志
+        throw ApiError.network('无法连接到服务器，请检查：\n1. 是否与服务器在同一网络\n2. 服务器地址是否正确\n3. 防火墙是否阻止连接', lastException);
       }
     }
 

@@ -109,8 +109,12 @@ class _LoginScreenState extends State<LoginScreen> {
       final username = _usernameController.text;
       final password = _passwordController.text;
 
+      print('开始登录: $username'); // 调试日志
+      
       // 使用 API 登录
       final loginResponse = await _authService.login(username, password);
+      
+      print('登录成功: ${loginResponse.user.username}'); // 调试日志
       
       // 保存上次登录的用户名
       final prefs = await SharedPreferences.getInstance();
@@ -131,17 +135,35 @@ class _LoginScreenState extends State<LoginScreen> {
       
       Navigator.pushReplacementNamed(context, '/main');
     } on ApiError catch (e) {
+      print('登录失败 (ApiError): ${e.message}, 错误代码: ${e.errorCode}'); // 调试日志
+      
+      String errorMessage = e.message;
+      
+      // 根据错误类型提供更友好的提示
+      if (e.isTimeoutError) {
+        errorMessage = '连接超时，请检查：\n1. 是否与服务器在同一网络\n2. 服务器地址是否正确\n3. 网络连接是否正常';
+      } else if (e.isNetworkError) {
+        errorMessage = '网络连接失败，请检查：\n1. 是否与服务器在同一网络\n2. 服务器地址是否正确\n3. 防火墙是否阻止连接';
+      } else if (e.isUnauthorized) {
+        errorMessage = '用户名或密码错误';
+      }
+      
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(e.message),
+          content: Text(errorMessage),
           backgroundColor: Colors.red,
+          duration: Duration(seconds: 5), // 延长显示时间
         ),
       );
-    } catch (e) {
+    } catch (e, stackTrace) {
+      print('登录失败 (未知错误): $e'); // 调试日志
+      print('堆栈跟踪: $stackTrace'); // 调试日志
+      
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('登录失败: ${e.toString()}'),
+          content: Text('登录失败: ${e.toString()}\n请检查网络连接和服务器地址'),
           backgroundColor: Colors.red,
+          duration: Duration(seconds: 5), // 延长显示时间
         ),
       );
     } finally {

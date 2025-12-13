@@ -556,3 +556,4 @@ async def search_all_suppliers(
             detail=f"搜索供应商失败: {str(e)}"
         )
 
+

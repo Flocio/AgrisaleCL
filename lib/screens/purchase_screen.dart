@@ -187,14 +187,14 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
       // 获取所有采购记录（不分页，用于列表显示）
       final purchasesResponse = await _purchaseRepo.getPurchases(page: 1, pageSize: 1000);
       final purchases = purchasesResponse.items;
-      
-      setState(() {
-        _products = products;
-        _suppliers = suppliers;
-        _purchases = purchases;
+        
+        setState(() {
+          _products = products;
+          _suppliers = suppliers;
+          _purchases = purchases;
         _filteredPurchases = purchases;
         _isLoading = false;
-      });
+        });
     } on ApiError catch (e) {
       setState(() {
         _isLoading = false;
@@ -240,7 +240,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
         
         await _purchaseRepo.createPurchase(purchaseCreate);
         _fetchData();
-        
+      
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -287,7 +287,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
         );
         
         await _purchaseRepo.updatePurchase(purchase.id, purchaseUpdate);
-        _fetchData();
+          _fetchData();
         
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -296,7 +296,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
               backgroundColor: Colors.green,
             ),
           );
-        }
+    }
       } on ApiError catch (e) {
         if (mounted) {
           String errorMessage = e.message;
@@ -348,7 +348,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                       note: _noteController.text.isEmpty ? null : _noteController.text,
                     );
                     await _purchaseRepo.updatePurchase(purchase.id, purchaseUpdate);
-                    Navigator.of(context).pop();
+                      Navigator.of(context).pop();
                     _fetchData();
                   } on ApiError catch (e) {
                     if (mounted) {
@@ -718,31 +718,31 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
               child: _isLoading
                   ? Center(child: CircularProgressIndicator())
                   : _filteredPurchases.isEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.shopping_cart, size: 64, color: Colors.grey[400]),
-                              SizedBox(height: 16),
-                              Text(
-                                _isSearching ? '没有匹配的采购记录' : '暂无采购记录',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  color: Colors.grey[600],
-                                ),
-                              ),
-                              SizedBox(height: 8),
-                              Text(
-                                _isSearching ? '请尝试其他搜索条件' : '点击下方 + 按钮添加采购记录',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.grey[500],
-                                ),
-                              ),
-                            ],
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.shopping_cart, size: 64, color: Colors.grey[400]),
+                          SizedBox(height: 16),
+                          Text(
+                            _isSearching ? '没有匹配的采购记录' : '暂无采购记录',
+                            style: TextStyle(
+                              fontSize: 18,
+                              color: Colors.grey[600],
+                            ),
                           ),
-                        )
-                      : ListView.builder(
+                          SizedBox(height: 8),
+                          Text(
+                            _isSearching ? '请尝试其他搜索条件' : '点击下方 + 按钮添加采购记录',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey[500],
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.builder(
                       // 让列表也能点击收起键盘
                       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
                       itemCount: _filteredPurchases.length,
@@ -789,7 +789,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                                               color: purchase.quantity >= 0 ? Colors.green[100] : Colors.red[100],
                                               borderRadius: BorderRadius.circular(12),
                                             ),
-                                            child: Text(
+                                      child: Text(
                                               purchase.quantity >= 0 ? '采购' : '退货',
                                               style: TextStyle(
                                                 fontSize: 10,

@@ -85,13 +85,13 @@ class _ReturnsReportScreenState extends State<ReturnsReportScreen> {
         return _isDescending ? dateB.compareTo(dateA) : dateA.compareTo(dateB);
       });
       
-      setState(() {
-        _allReturns = returns;
-        _customers = customers;
+        setState(() {
+          _allReturns = returns;
+          _customers = customers;
         _products = productsResponse.items;
         _isLoading = false;
-        _applyFilters(); // 应用筛选
-      });
+          _applyFilters(); // 应用筛选
+        });
     } on ApiError catch (e) {
       setState(() {
         _isLoading = false;

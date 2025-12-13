@@ -187,12 +187,12 @@ class _SalesScreenState extends State<SalesScreen> {
       // 获取所有销售记录（不分页，用于列表显示）
       final salesResponse = await _saleRepo.getSales(page: 1, pageSize: 1000);
       final sales = salesResponse.items;
-      
-      setState(() {
-        _products = products;
-        _customers = customers;
-        _sales = sales;
-        _filteredSales = sales;
+        
+        setState(() {
+          _products = products;
+          _customers = customers;
+          _sales = sales;
+          _filteredSales = sales;
         _isLoading = false;
       });
     } on ApiError catch (e) {
@@ -287,7 +287,7 @@ class _SalesScreenState extends State<SalesScreen> {
         );
         
         await _saleRepo.updateSale(sale.id, saleUpdate);
-        _fetchData();
+          _fetchData();
         
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -296,7 +296,7 @@ class _SalesScreenState extends State<SalesScreen> {
               backgroundColor: Colors.green,
             ),
           );
-        }
+    }
       } on ApiError catch (e) {
         if (mounted) {
           String errorMessage = e.message;
@@ -348,7 +348,7 @@ class _SalesScreenState extends State<SalesScreen> {
                       note: _noteController.text.isEmpty ? null : _noteController.text,
                     );
                     await _saleRepo.updateSale(sale.id, saleUpdate);
-                    Navigator.of(context).pop();
+                      Navigator.of(context).pop();
                     _fetchData();
                   } on ApiError catch (e) {
                     if (mounted) {
@@ -718,31 +718,31 @@ class _SalesScreenState extends State<SalesScreen> {
               child: _isLoading
                   ? Center(child: CircularProgressIndicator())
                   : _filteredSales.isEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.point_of_sale, size: 64, color: Colors.grey[400]),
-                              SizedBox(height: 16),
-                              Text(
-                                _isSearching ? '没有匹配的销售记录' : '暂无销售记录',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  color: Colors.grey[600],
-                                ),
-                              ),
-                              SizedBox(height: 8),
-                              Text(
-                                _isSearching ? '请尝试其他搜索条件' : '点击下方 + 按钮添加销售记录',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.grey[500],
-                                ),
-                              ),
-                            ],
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.point_of_sale, size: 64, color: Colors.grey[400]),
+                          SizedBox(height: 16),
+                          Text(
+                            _isSearching ? '没有匹配的销售记录' : '暂无销售记录',
+                            style: TextStyle(
+                              fontSize: 18,
+                              color: Colors.grey[600],
+                            ),
                           ),
-                        )
-                      : ListView.builder(
+                          SizedBox(height: 8),
+                          Text(
+                            _isSearching ? '请尝试其他搜索条件' : '点击下方 + 按钮添加销售记录',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey[500],
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.builder(
                       // 让列表也能点击收起键盘
                       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
                       itemCount: _filteredSales.length,

@@ -85,13 +85,13 @@ class _PurchaseReportScreenState extends State<PurchaseReportScreen> {
         return _isDescending ? dateB.compareTo(dateA) : dateA.compareTo(dateB);
       });
       
-      setState(() {
-        _allPurchases = purchases;
-        _suppliers = suppliers;
+        setState(() {
+          _allPurchases = purchases;
+          _suppliers = suppliers;
         _products = productsResponse.items;
         _isLoading = false;
-        _applyFilters(); // 应用筛选
-      });
+          _applyFilters(); // 应用筛选
+        });
     } on ApiError catch (e) {
       setState(() {
         _isLoading = false;

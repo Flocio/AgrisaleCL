@@ -107,8 +107,8 @@ class _SupplierRecordsScreenState extends State<SupplierRecordsScreen> {
         return _isDescending ? dateB.compareTo(dateA) : dateA.compareTo(dateB);
       });
 
-      // 将单位信息添加到采购记录中
-      final purchasesWithUnits = purchases.map((purchase) {
+        // 将单位信息添加到采购记录中
+        final purchasesWithUnits = purchases.map((purchase) {
         final product = _products.firstWhere(
               (p) => p.name == purchase.productName,
           orElse: () => Product(
@@ -119,8 +119,8 @@ class _SupplierRecordsScreenState extends State<SupplierRecordsScreen> {
             unit: ProductUnit.kilogram,
             version: 1,
           ),
-        );
-        return {
+          );
+          return {
           'id': purchase.id,
           'purchaseDate': purchase.purchaseDate,
           'productName': purchase.productName,
@@ -128,16 +128,16 @@ class _SupplierRecordsScreenState extends State<SupplierRecordsScreen> {
           'unit': product.unit.value,
           'totalPurchasePrice': purchase.totalPurchasePrice,
           'note': purchase.note,
-        };
-      }).toList();
+          };
+        }).toList();
 
       // 计算汇总数据
       _calculateSummary(purchasesWithUnits);
 
-      setState(() {
-        _purchases = purchasesWithUnits;
+        setState(() {
+          _purchases = purchasesWithUnits;
         _isLoading = false;
-      });
+        });
     } on ApiError catch (e) {
       setState(() {
         _isLoading = false;

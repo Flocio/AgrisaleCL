@@ -99,8 +99,8 @@ class _ProductScreenState extends State<ProductScreen> {
       // 获取所有供应商（不分页）
       final suppliers = await _supplierRepo.getAllSuppliers();
       
-      setState(() {
-        _products = products;
+        setState(() {
+          _products = products;
         _suppliers = suppliers;
         _filterProducts();
         _isLoading = false;
@@ -162,12 +162,12 @@ class _ProductScreenState extends State<ProductScreen> {
         }
       } on ApiError catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
               content: Text(e.message),
               backgroundColor: Colors.red,
-            ),
-          );
+              ),
+            );
         }
       } catch (e) {
         if (mounted) {
@@ -204,12 +204,12 @@ class _ProductScreenState extends State<ProductScreen> {
         _fetchProducts();
         
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
               content: Text('产品更新成功'),
               backgroundColor: Colors.green,
-            ),
-          );
+              ),
+            );
         }
       } on ApiError catch (e) {
         if (mounted) {
@@ -413,89 +413,89 @@ class _ProductScreenState extends State<ProductScreen> {
               child: _isLoading
                   ? Center(child: CircularProgressIndicator())
                   : _filteredProducts.isEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.inventory, size: 64, color: Colors.grey[400]),
-                              SizedBox(height: 16),
-                              Text(
-                                _isSearching ? '没有匹配的产品' : '暂无产品',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  color: Colors.grey[600],
-                                ),
-                              ),
-                              SizedBox(height: 8),
-                              Text(
-                                _isSearching ? '请尝试其他搜索条件' : '点击下方 + 按钮添加产品',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.grey[500],
-                                ),
-                              ),
-                            ],
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                          Icon(Icons.inventory, size: 64, color: Colors.grey[400]),
+                          SizedBox(height: 16),
+                          Text(
+                            _isSearching ? '没有匹配的产品' : '暂无产品',
+                            style: TextStyle(
+                              fontSize: 18,
+                              color: Colors.grey[600],
+                            ),
                           ),
-                        )
-                      : ListView.builder(
-                          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-                          itemCount: _filteredProducts.length,
-                          padding: EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-                          itemBuilder: (context, index) {
-                            final product = _filteredProducts[index];
-                            return Card(
-                              margin: EdgeInsets.symmetric(vertical: 4, horizontal: 2),
-                              elevation: 1,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: InkWell(
-                                borderRadius: BorderRadius.circular(10),
-                                child: Padding(
-                                  padding: EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-                                  child: Row(
-                                    children: [
-                                      Container(
-                                        width: 40,
-                                        height: 40,
-                                        decoration: BoxDecoration(
-                                          color: Colors.green[100],
-                                          borderRadius: BorderRadius.circular(20),
-                                        ),
-                                        child: Center(
-                                          child: Text(
+                          SizedBox(height: 8),
+                          Text(
+                            _isSearching ? '请尝试其他搜索条件' : '点击下方 + 按钮添加产品',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey[500],
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.builder(
+                      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                      itemCount: _filteredProducts.length,
+                      padding: EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                      itemBuilder: (context, index) {
+                        final product = _filteredProducts[index];
+                        return Card(
+                          margin: EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+                          elevation: 1,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(10),
+                            child: Padding(
+                              padding: EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 40,
+                                    height: 40,
+                                    decoration: BoxDecoration(
+                                      color: Colors.green[100],
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    child: Center(
+                                      child: Text(
                                             product.name.substring(0, 1),
-                                            style: TextStyle(
-                                              fontSize: 20,
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.green[800],
-                                            ),
-                                          ),
+                                        style: TextStyle(
+                                          fontSize: 20,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.green[800],
                                         ),
                                       ),
-                                      SizedBox(width: 16),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
+                                    ),
+                                  ),
+                                  SizedBox(width: 16),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
                                               product.name,
-                                              style: TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 16,
-                                              ),
-                                            ),
-                                            Padding(
-                                              padding: const EdgeInsets.only(top: 4),
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 16,
+                                          ),
+                                        ),
+                                        Padding(
+                                          padding: const EdgeInsets.only(top: 4),
                                               child: Row(
                                                 children: [
                                                   Text(
                                                     '库存: ${_formatNumber(product.stock)} ${product.unit.value}',
-                                                    style: TextStyle(
-                                                      fontSize: 14,
-                                                      color: Colors.grey[700],
-                                                    ),
-                                                  ),
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              color: Colors.grey[700],
+                                            ),
+                                          ),
                                                   if (product.supplierId != null && product.supplierId != 0) ...[
                                                     SizedBox(width: 8),
                                                     Icon(Icons.business, size: 12, color: Colors.blue[700]),
@@ -514,48 +514,48 @@ class _ProductScreenState extends State<ProductScreen> {
                                                 ],
                                               ),
                                             ),
-                                            Container(
+                                        Container(
                                               height: 18,
                                               child: product.description != null && product.description!.isNotEmpty
-                                                  ? Text(
+                                            ? Text(
                                                       product.description!,
-                                                      style: TextStyle(
-                                                        fontSize: 13,
-                                                        color: Colors.grey[600],
-                                                      ),
-                                                      maxLines: 1,
-                                                      overflow: TextOverflow.ellipsis,
-                                                    )
+                                                style: TextStyle(
+                                                  fontSize: 13,
+                                                  color: Colors.grey[600],
+                      ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              )
                                                   : null,
-                                            ),
-                                          ],
                                         ),
-                                      ),
-                                      IconButton(
-                                        icon: Icon(Icons.edit, color: Colors.green),
-                                        tooltip: '编辑',
-                                        onPressed: () => _editProduct(product),
+                                      ],
+                                    ),
+                                  ),
+                      IconButton(
+                                    icon: Icon(Icons.edit, color: Colors.green),
+                                    tooltip: '编辑',
+                                    onPressed: () => _editProduct(product),
+                                    constraints: BoxConstraints(),
+                                    padding: EdgeInsets.all(8),
+                                  ),
+                                  if (_showDeleteButtons)
+                                    Padding(
+                                      padding: const EdgeInsets.only(left: 4),
+                                      child: IconButton(
+                                        icon: Icon(Icons.delete, color: Colors.red),
+                                        tooltip: '删除',
+                        onPressed: () => _deleteProduct(product),
                                         constraints: BoxConstraints(),
                                         padding: EdgeInsets.all(8),
                                       ),
-                                      if (_showDeleteButtons)
-                                        Padding(
-                                          padding: const EdgeInsets.only(left: 4),
-                                          child: IconButton(
-                                            icon: Icon(Icons.delete, color: Colors.red),
-                                            tooltip: '删除',
-                                            onPressed: () => _deleteProduct(product),
-                                            constraints: BoxConstraints(),
-                                            padding: EdgeInsets.all(8),
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                ),
+                      ),
+                    ],
                               ),
-                            );
-                          },
-                        ),
+                            ),
+                  ),
+                );
+              },
+            ),
           ),
             // 添加搜索栏和浮动按钮的容器
             Container(

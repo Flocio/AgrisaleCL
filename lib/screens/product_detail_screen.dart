@@ -220,7 +220,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
 
     try {
       final productName = widget.product['name'] as String;
-      
+        
       // 并行获取所有数据
       final results = await Future.wait([
         _purchaseRepo.getPurchases(page: 1, pageSize: 10000),
@@ -252,103 +252,103 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         productSupplierName = productSupplier.name;
       }
 
-      // 合并所有记录
-      List<Map<String, dynamic>> allRecords = [];
-      
-      // 添加采购数据
-      for (var purchase in purchases) {
-        final supplier = suppliers.firstWhere(
+    // 合并所有记录
+    List<Map<String, dynamic>> allRecords = [];
+    
+    // 添加采购数据
+    for (var purchase in purchases) {
+      final supplier = suppliers.firstWhere(
           (s) => s.id == purchase.supplierId,
           orElse: () => Supplier(id: -1, userId: -1, name: '未知供应商'),
-        );
-        
-        allRecords.add({
+      );
+      
+      allRecords.add({
           'date': purchase.purchaseDate ?? '',
           'productName': purchase.productName,
           'quantity': purchase.quantity,
           'partnerId': purchase.supplierId,
           'partnerName': supplier.name,
-          'partnerType': 'supplier',
+        'partnerType': 'supplier',
           'totalPrice': purchase.totalPurchasePrice ?? 0.0,
           'note': purchase.note ?? '',
-          'recordType': '采购',
-          'valueSign': 1, // 正值
-        });
-      }
-      
-      // 添加销售数据
-      for (var sale in sales) {
-        final customer = customers.firstWhere(
+        'recordType': '采购',
+        'valueSign': 1, // 正值
+      });
+    }
+    
+    // 添加销售数据
+    for (var sale in sales) {
+      final customer = customers.firstWhere(
           (c) => c.id == sale.customerId,
           orElse: () => Customer(id: -1, userId: -1, name: '未知客户'),
-        );
-        
-        allRecords.add({
+      );
+      
+      allRecords.add({
           'date': sale.saleDate ?? '',
           'productName': sale.productName,
           'quantity': sale.quantity,
           'partnerId': sale.customerId,
           'partnerName': customer.name,
-          'partnerType': 'customer',
+        'partnerType': 'customer',
           'totalPrice': sale.totalSalePrice ?? 0.0,
           'note': sale.note ?? '',
-          'recordType': '销售',
-          'valueSign': -1, // 负值
-        });
-      }
-      
-      // 添加退货数据
-      for (var returnItem in returns) {
-        final customer = customers.firstWhere(
+        'recordType': '销售',
+        'valueSign': -1, // 负值
+      });
+    }
+    
+    // 添加退货数据
+    for (var returnItem in returns) {
+      final customer = customers.firstWhere(
           (c) => c.id == returnItem.customerId,
           orElse: () => Customer(id: -1, userId: -1, name: '未知客户'),
-        );
-        
-        allRecords.add({
+      );
+      
+      allRecords.add({
           'date': returnItem.returnDate ?? '',
           'productName': returnItem.productName,
           'quantity': returnItem.quantity,
           'partnerId': returnItem.customerId,
           'partnerName': customer.name,
-          'partnerType': 'customer',
+        'partnerType': 'customer',
           'totalPrice': returnItem.totalReturnPrice ?? 0.0,
           'note': returnItem.note ?? '',
-          'recordType': '退货',
-          'valueSign': 1, // 正值
-        });
-      }
-
-      // 按日期和交易类型排序
-      allRecords.sort((a, b) {
-        int result;
-        
-        // 一级排序：按日期
-        result = _isDescending
-            ? b['date'].toString().compareTo(a['date'].toString())
-            : a['date'].toString().compareTo(b['date'].toString());
-        
-        // 如果日期相同，则按交易类型排序
-        if (result == 0) {
-          final aTypeOrder = _typeOrderMap[a['recordType']] ?? 99;
-          final bTypeOrder = _typeOrderMap[b['recordType']] ?? 99;
-          result = aTypeOrder.compareTo(bTypeOrder);
-        }
-        
-        return result;
+        'recordType': '退货',
+        'valueSign': 1, // 正值
       });
+    }
 
-      // 计算汇总数据
-      _calculateSummary(allRecords);
+    // 按日期和交易类型排序
+    allRecords.sort((a, b) {
+      int result;
+      
+      // 一级排序：按日期
+      result = _isDescending
+          ? b['date'].toString().compareTo(a['date'].toString())
+          : a['date'].toString().compareTo(b['date'].toString());
+      
+      // 如果日期相同，则按交易类型排序
+      if (result == 0) {
+        final aTypeOrder = _typeOrderMap[a['recordType']] ?? 99;
+        final bTypeOrder = _typeOrderMap[b['recordType']] ?? 99;
+        result = aTypeOrder.compareTo(bTypeOrder);
+      }
+      
+      return result;
+    });
 
-      setState(() {
-        _allRecords = allRecords;
-        _filteredRecords = allRecords;
-        _suppliers = suppliers;
-        _customers = customers;
+    // 计算汇总数据
+    _calculateSummary(allRecords);
+
+        setState(() {
+          _allRecords = allRecords;
+          _filteredRecords = allRecords;
+          _suppliers = suppliers;
+          _customers = customers;
         _productSupplierName = productSupplierName;
         _currentStock = (widget.product['stock'] as num?)?.toDouble() ?? 0.0;
         _isLoading = false;
-      });
+        });
     } on ApiError catch (e) {
       setState(() {
         _isLoading = false;

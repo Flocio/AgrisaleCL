@@ -117,3 +117,4 @@ class PaginatedResponse<T> {
   bool get hasPreviousPage => page > 1;
 }
 
+

@@ -760,3 +760,4 @@ async def delete_sale(
             detail=f"删除销售记录失败: {str(e)}"
         )
 
+

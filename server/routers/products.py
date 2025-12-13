@@ -723,3 +723,4 @@ async def search_all_products(
             detail=f"搜索产品失败: {str(e)}"
         )
 
+

@@ -66,9 +66,9 @@ class _FinancialStatisticsScreenState extends State<FinancialStatisticsScreen> {
   Future<void> _fetchProducts() async {
     try {
       final productsResponse = await _productRepo.getProducts(page: 1, pageSize: 10000);
-      setState(() {
+        setState(() {
         _products = productsResponse.items;
-      });
+        });
     } on ApiError catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -118,9 +118,9 @@ class _FinancialStatisticsScreenState extends State<FinancialStatisticsScreen> {
         purchases = purchases.where((p) => p.productName == _selectedProduct).toList();
       }
 
-      // 清空记录日期和月份集合
-      _datesWithRecords.clear();
-      _monthsWithRecords.clear();
+        // 清空记录日期和月份集合
+        _datesWithRecords.clear();
+        _monthsWithRecords.clear();
 
       // 处理每日统计
       final dailyMap = <String, Map<String, double>>{};
@@ -147,7 +147,7 @@ class _FinancialStatisticsScreenState extends State<FinancialStatisticsScreen> {
         
         dailyMap[date] = dailyMap[date] ?? {'totalSales': 0.0, 'totalPurchases': 0.0};
         dailyMap[date]!['totalSales'] = (dailyMap[date]!['totalSales'] ?? 0.0) - (returnItem.totalReturnPrice ?? 0.0);
-      }
+    }
       
       // 处理采购数据
       for (var purchase in purchases) {
@@ -157,28 +157,28 @@ class _FinancialStatisticsScreenState extends State<FinancialStatisticsScreen> {
         _datesWithRecords.add(date);
         _monthsWithRecords.add(month);
         
-        dailyMap[date] = dailyMap[date] ?? {'totalSales': 0.0, 'totalPurchases': 0.0};
+      dailyMap[date] = dailyMap[date] ?? {'totalSales': 0.0, 'totalPurchases': 0.0};
         dailyMap[date]!['totalPurchases'] = (dailyMap[date]!['totalPurchases'] ?? 0.0) + (purchase.totalPurchasePrice ?? 0.0);
       }
 
       // 创建每日统计列表并排序
-      final dailyEntries = dailyMap.entries.map((entry) {
-        return {
-          'date': entry.key,
-          'totalSales': entry.value['totalSales'],
-          'totalPurchases': entry.value['totalPurchases']
-        };
-      }).toList();
-      
-      dailyEntries.sort((a, b) {
-        int compareResult = (a['date'] as String).compareTo(b['date'] as String);
-        return _isDescending ? -compareResult : compareResult;
-      });
-      
-      _dailyStatistics = dailyEntries;
+    final dailyEntries = dailyMap.entries.map((entry) {
+      return {
+        'date': entry.key,
+        'totalSales': entry.value['totalSales'],
+        'totalPurchases': entry.value['totalPurchases']
+      };
+    }).toList();
+    
+    dailyEntries.sort((a, b) {
+      int compareResult = (a['date'] as String).compareTo(b['date'] as String);
+      return _isDescending ? -compareResult : compareResult;
+    });
+    
+    _dailyStatistics = dailyEntries;
 
       // 处理每月统计
-      final monthlyMap = <String, Map<String, double>>{};
+    final monthlyMap = <String, Map<String, double>>{};
       
       // 处理销售数据
       for (var sale in sales) {
@@ -186,39 +186,39 @@ class _FinancialStatisticsScreenState extends State<FinancialStatisticsScreen> {
         final month = sale.saleDate!.substring(0, 7);
         monthlyMap[month] = monthlyMap[month] ?? {'totalSales': 0.0, 'totalPurchases': 0.0};
         monthlyMap[month]!['totalSales'] = (monthlyMap[month]!['totalSales'] ?? 0.0) + (sale.totalSalePrice ?? 0.0);
-      }
+    }
       
       // 处理退货数据（从销售额中减去）
       for (var returnItem in returns) {
         if (returnItem.returnDate == null) continue;
         final month = returnItem.returnDate!.substring(0, 7);
-        monthlyMap[month] = monthlyMap[month] ?? {'totalSales': 0.0, 'totalPurchases': 0.0};
+      monthlyMap[month] = monthlyMap[month] ?? {'totalSales': 0.0, 'totalPurchases': 0.0};
         monthlyMap[month]!['totalSales'] = (monthlyMap[month]!['totalSales'] ?? 0.0) - (returnItem.totalReturnPrice ?? 0.0);
-      }
+    }
       
       // 处理采购数据
       for (var purchase in purchases) {
         if (purchase.purchaseDate == null) continue;
         final month = purchase.purchaseDate!.substring(0, 7);
-        monthlyMap[month] = monthlyMap[month] ?? {'totalSales': 0.0, 'totalPurchases': 0.0};
+      monthlyMap[month] = monthlyMap[month] ?? {'totalSales': 0.0, 'totalPurchases': 0.0};
         monthlyMap[month]!['totalPurchases'] = (monthlyMap[month]!['totalPurchases'] ?? 0.0) + (purchase.totalPurchasePrice ?? 0.0);
-      }
+    }
 
       // 创建每月统计列表并排序
-      final monthlyEntries = monthlyMap.entries.map((entry) {
-        return {
-          'month': entry.key,
-          'totalSales': entry.value['totalSales'],
-          'totalPurchases': entry.value['totalPurchases']
-        };
-      }).toList();
-      
-      monthlyEntries.sort((a, b) {
-        int compareResult = (a['month'] as String).compareTo(b['month'] as String);
-        return _isDescending ? -compareResult : compareResult;
-      });
-      
-      _monthlyStatistics = monthlyEntries;
+    final monthlyEntries = monthlyMap.entries.map((entry) {
+      return {
+        'month': entry.key,
+        'totalSales': entry.value['totalSales'],
+        'totalPurchases': entry.value['totalPurchases']
+      };
+    }).toList();
+    
+    monthlyEntries.sort((a, b) {
+      int compareResult = (a['month'] as String).compareTo(b['month'] as String);
+      return _isDescending ? -compareResult : compareResult;
+    });
+    
+        _monthlyStatistics = monthlyEntries;
 
       setState(() {
         _isLoading = false;

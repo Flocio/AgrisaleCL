@@ -21,6 +21,7 @@ import '../repositories/return_repository.dart';
 import '../repositories/income_repository.dart';
 import '../repositories/remittance_repository.dart';
 import '../services/auth_service.dart';
+import '../services/user_status_service.dart';
 import '../models/api_error.dart';
 import '../models/api_response.dart';
 
@@ -85,12 +86,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _loadModelSettings() async {
     try {
       final settings = await _settingsRepo.getUserSettings();
-      setState(() {
+          setState(() {
         _temperature = settings.deepseekTemperature;
         _maxTokens = settings.deepseekMaxTokens;
         _selectedModel = settings.deepseekModel;
         _apiKey = settings.deepseekApiKey ?? '';
-        _apiKeyController.text = _apiKey;
+            _apiKeyController.text = _apiKey;
         _showOnlineUsers = settings.isShowOnlineUsers;
       });
     } on ApiError catch (e) {
@@ -209,9 +210,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (username == null) {
     ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('请先登录')),
-        );
-        return;
-      }
+      );
+      return;
+    }
 
       // 显示加载对话框
       showDialog(
@@ -232,7 +233,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final userInfo = await _authService.getCurrentUser();
       if (userInfo == null) {
         Navigator.of(context).pop(); // 关闭加载对话框
-        ScaffoldMessenger.of(context).showSnackBar(
+    ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('请先登录')),
         );
         return;
@@ -307,7 +308,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           
           Navigator.of(context).pop(); // 关闭加载对话框
           
-          ScaffoldMessenger.of(context).showSnackBar(
+    ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('数据导出成功: $selectedPath'),
               duration: Duration(seconds: 3),
@@ -879,15 +880,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
     
     if (confirm == true) {
-      // 停止自动备份服务
-      await AutoBackupService().stopAutoBackup();
-      
-      // 清除当前用户名（保留 last_username 用于下次登录）
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove('current_username');
-      
-      // 跳转到登录界面
-      Navigator.of(context).pushReplacementNamed('/');
+      try {
+        // 停止心跳服务（必须在清除 Token 之前，因为需要 Token 来调用服务器接口）
+        UserStatusService().stopHeartbeat();
+        
+        // 停止自动备份服务
+        await AutoBackupService().stopAutoBackup();
+        
+        // 调用 AuthService 的 logout 方法，清除 Token 和用户名
+        await AuthService().logout();
+        
+        // 跳转到登录界面
+        Navigator.of(context).pushReplacementNamed('/');
+      } catch (e) {
+        print('退出登录时出错: $e');
+        // 即使出错，也要清除本地 Token 并跳转
+        try {
+          await AuthService().logout();
+        } catch (e2) {
+          print('清除 Token 时出错: $e2');
+        }
+        Navigator.of(context).pushReplacementNamed('/');
+      }
     }
   }
   
