@@ -121,40 +121,6 @@ class _VersionInfoScreenState extends State<VersionInfoScreen> {
                           _buildInfoRow('应用名称', _packageInfo!.appName),
                           SizedBox(height: 12),
                           _buildInfoRow('包名', _packageInfo!.packageName),
-                          // 版本介绍（如果有检查更新信息）
-                          if (_updateInfo != null && _updateInfo!.releaseNotes.isNotEmpty) ...[
-                            SizedBox(height: 16),
-                            Divider(),
-                            SizedBox(height: 8),
-                            Text(
-                              '版本介绍',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.grey[700],
-                              ),
-                            ),
-                            SizedBox(height: 8),
-                            Container(
-                              constraints: BoxConstraints(maxHeight: 200),
-                              padding: EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: Colors.grey[50],
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: Colors.grey[200]!),
-                              ),
-                              child: SingleChildScrollView(
-                                child: Text(
-                                  _updateInfo!.releaseNotes,
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: Colors.grey[700],
-                                    height: 1.5,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
                         ],
                       ),
                     ),
