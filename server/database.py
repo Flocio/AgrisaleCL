@@ -127,11 +127,11 @@ class SQLiteConnectionPool:
                     # 首次创建数据库
                     logger.info("首次创建数据库，执行初始化脚本...")
                     self._create_tables(conn)
-                    self._set_version(conn, 12)
+                    self._set_version(conn, 13)
                 else:
                     # 升级数据库
                     logger.info(f"数据库版本: {version}, 检查是否需要升级...")
-                    self._upgrade_database(conn, version, 12)
+                    self._upgrade_database(conn, version, 13)
         except Exception as e:
             logger.error(f"数据库初始化失败: {e}")
             raise
@@ -313,13 +313,15 @@ class SQLiteConnectionPool:
                 FOREIGN KEY (userId) REFERENCES users (id) ON DELETE CASCADE)
         ''')
         
-        # 在线用户表（用于跟踪在线状态）
+        # 在线用户表（用于跟踪在线状态，支持多设备）
         conn.execute('''
             CREATE TABLE IF NOT EXISTS online_users (
-                userId INTEGER PRIMARY KEY,
+                userId INTEGER NOT NULL,
+                deviceId TEXT NOT NULL,
                 username TEXT NOT NULL,
                 last_heartbeat TEXT DEFAULT (datetime('now')),
                 current_action TEXT,
+                PRIMARY KEY (userId, deviceId),
                 FOREIGN KEY (userId) REFERENCES users (id) ON DELETE CASCADE)
         ''')
         
@@ -420,13 +422,15 @@ class SQLiteConnectionPool:
             if 'show_online_users' not in columns:
                 conn.execute('ALTER TABLE user_settings ADD COLUMN show_online_users INTEGER DEFAULT 1')
             
-            # 创建在线用户表
+            # 创建在线用户表（支持多设备）
             conn.execute('''
                 CREATE TABLE IF NOT EXISTS online_users (
-                    userId INTEGER PRIMARY KEY,
+                    userId INTEGER NOT NULL,
+                    deviceId TEXT NOT NULL,
                     username TEXT NOT NULL,
                     last_heartbeat TEXT DEFAULT (datetime('now')),
                     current_action TEXT,
+                    PRIMARY KEY (userId, deviceId),
                     FOREIGN KEY (userId) REFERENCES users (id) ON DELETE CASCADE)
             ''')
         
@@ -445,6 +449,33 @@ class SQLiteConnectionPool:
             conn.execute('ALTER TABLE products ADD COLUMN updated_at TEXT DEFAULT (datetime("now"))')
         except sqlite3.OperationalError:
             pass
+        
+        # 版本 13: 修改 online_users 表支持多设备
+        if old_version < 13:
+            logger.info("升级到版本 13: 修改 online_users 表支持多设备")
+            try:
+                # 检查表是否存在
+                cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='online_users'")
+                if cursor.fetchone():
+                    # 删除旧表（会丢失在线状态，但这是必要的）
+                    conn.execute("DROP TABLE IF EXISTS online_users")
+                    logger.info("已删除旧的 online_users 表")
+                
+                # 创建新表（支持多设备）
+                conn.execute('''
+                    CREATE TABLE IF NOT EXISTS online_users (
+                        userId INTEGER NOT NULL,
+                        deviceId TEXT NOT NULL,
+                        username TEXT NOT NULL,
+                        last_heartbeat TEXT DEFAULT (datetime('now')),
+                        current_action TEXT,
+                        PRIMARY KEY (userId, deviceId),
+                        FOREIGN KEY (userId) REFERENCES users (id) ON DELETE CASCADE)
+                ''')
+                logger.info("已创建新的 online_users 表（支持多设备）")
+            except Exception as e:
+                logger.error(f"升级 online_users 表失败: {e}", exc_info=True)
+                raise
         
         # 创建索引
         conn.execute('CREATE INDEX IF NOT EXISTS idx_products_userId ON products(userId)')

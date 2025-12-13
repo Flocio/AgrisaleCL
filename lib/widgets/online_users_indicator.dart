@@ -64,6 +64,8 @@ class _OnlineUsersIndicatorState extends State<OnlineUsersIndicator> {
           _onlineUsers = users;
           _isLoading = false;
         });
+        // 同时重新加载设置（检查是否显示）
+        _loadSettings();
       }
     };
 
@@ -77,6 +79,8 @@ class _OnlineUsersIndicatorState extends State<OnlineUsersIndicator> {
             _onlineUsers = users;
             _isLoading = false;
           });
+          // 同时重新加载设置（检查是否显示）
+          _loadSettings();
         }
       },
     );
@@ -201,9 +205,7 @@ class _OnlineUsersIndicatorState extends State<OnlineUsersIndicator> {
         child: Container(
           padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
-            color: _onlineUsersCount > 1
-                ? Colors.green.withOpacity(0.9)
-                : Colors.grey.withOpacity(0.7),
+            color: Colors.green.withOpacity(0.9),
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(

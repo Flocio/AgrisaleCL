@@ -92,13 +92,13 @@ async def register(user_data: UserCreate):
             }
             token = create_access_token(data=token_data)
             
-            # 更新在线用户表
+            # 更新在线用户表（使用默认设备ID，客户端会在心跳时更新）
             conn.execute(
                 """
-                INSERT OR REPLACE INTO online_users (userId, username, last_heartbeat, current_action)
-                VALUES (?, ?, datetime('now'), '注册')
+                INSERT OR REPLACE INTO online_users (userId, deviceId, username, last_heartbeat, current_action)
+                VALUES (?, ?, ?, datetime('now'), '注册')
                 """,
-                (user_id, user_data.username)
+                (user_id, 'default', user_data.username)
             )
             conn.commit()
             
@@ -176,13 +176,13 @@ async def login(login_data: UserLogin):
                 (user_id,)
             )
             
-            # 更新在线用户表
+            # 更新在线用户表（使用默认设备ID，客户端会在心跳时更新）
             conn.execute(
                 """
-                INSERT OR REPLACE INTO online_users (userId, username, last_heartbeat, current_action)
-                VALUES (?, ?, datetime('now'), '登录')
+                INSERT OR REPLACE INTO online_users (userId, deviceId, username, last_heartbeat, current_action)
+                VALUES (?, ?, ?, datetime('now'), '登录')
                 """,
-                (user_id, username)
+                (user_id, 'default', username)
             )
             
             conn.commit()

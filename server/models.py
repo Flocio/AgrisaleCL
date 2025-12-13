@@ -547,12 +547,14 @@ class UserSettingsResponse(BaseModel):
 
 class OnlineUserUpdate(BaseModel):
     """更新在线用户状态请求"""
+    device_id: Optional[str] = Field(None, max_length=100, description="设备ID（用于区分同一用户的不同设备）")
     current_action: Optional[str] = Field(None, max_length=200, description="当前操作描述")
 
 
 class OnlineUserResponse(BaseModel):
     """在线用户响应"""
     userId: int
+    deviceId: str
     username: str
     last_heartbeat: str
     current_action: Optional[str] = None

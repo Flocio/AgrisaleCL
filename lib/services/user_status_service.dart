@@ -2,6 +2,7 @@
 /// 处理用户心跳、在线用户列表、操作状态更新等功能
 
 import 'dart:async';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/api_response.dart';
 import '../models/api_error.dart';
 import 'api_service.dart';
@@ -9,12 +10,14 @@ import 'api_service.dart';
 /// 在线用户信息模型
 class OnlineUser {
   final int userId;
+  final String deviceId;
   final String username;
   final String lastHeartbeat;
   final String? currentAction;
 
   OnlineUser({
     required this.userId,
+    required this.deviceId,
     required this.username,
     required this.lastHeartbeat,
     this.currentAction,
@@ -23,6 +26,7 @@ class OnlineUser {
   factory OnlineUser.fromJson(Map<String, dynamic> json) {
     return OnlineUser(
       userId: json['userId'] as int? ?? json['user_id'] as int,
+      deviceId: json['deviceId'] as String? ?? json['device_id'] as String? ?? 'unknown',
       username: json['username'] as String,
       lastHeartbeat: json['last_heartbeat'] as String? ?? json['lastHeartbeat'] as String,
       currentAction: json['current_action'] as String? ?? json['currentAction'] as String?,
@@ -67,6 +71,28 @@ class UserStatusService {
   UserStatusService._internal();
 
   final ApiService _apiService = ApiService();
+  
+  /// 设备ID（用于区分同一用户的不同设备）
+  String? _deviceId;
+  
+  /// 获取或生成设备ID
+  Future<String> _getDeviceId() async {
+    if (_deviceId != null) {
+      return _deviceId!;
+    }
+    
+    // 从 SharedPreferences 获取或生成设备ID
+    final prefs = await SharedPreferences.getInstance();
+    _deviceId = prefs.getString('device_id');
+    
+    if (_deviceId == null || _deviceId!.isEmpty) {
+      // 生成新的设备ID（使用时间戳和随机数）
+      _deviceId = 'device_${DateTime.now().millisecondsSinceEpoch}_${(1000 + (9999 - 1000) * (DateTime.now().microsecond / 1000000)).toInt()}';
+      await prefs.setString('device_id', _deviceId!);
+    }
+    
+    return _deviceId!;
+  }
 
   /// 心跳定时器
   Timer? _heartbeatTimer;
@@ -145,11 +171,15 @@ class UserStatusService {
     try {
       _currentAction = action;
       
+      // 获取设备ID
+      final deviceId = await _getDeviceId();
+      
       await _apiService.post(
         '/api/users/heartbeat',
-        body: action != null
-            ? {'current_action': action}
-            : null,
+        body: {
+          'device_id': deviceId,
+          if (action != null) 'current_action': action,
+        },
         fromJsonT: (json) => json,
       );
     } catch (e) {
@@ -175,13 +205,24 @@ class UserStatusService {
     }
 
     // 立即获取一次
-    getOnlineUsers();
+    getOnlineUsers().catchError((e) {
+      // 静默处理错误，避免未处理的异常
+      print('获取在线用户列表失败: $e');
+    });
 
     // 启动定时更新
     _onlineUsersTimer?.cancel();
     _onlineUsersTimer = Timer.periodic(
       Duration(seconds: onlineUsersUpdateInterval),
-      (_) => getOnlineUsers(),
+      (_) async {
+        try {
+          await getOnlineUsers();
+        } catch (e) {
+          // 静默处理错误，避免未处理的异常
+          // 401错误会在getOnlineUsers内部处理并停止定时器
+          print('定时更新在线用户列表失败: $e');
+        }
+      },
     );
   }
 
@@ -215,7 +256,12 @@ class UserStatusService {
           errorCode: response.errorCode,
         );
       }
-    } on ApiError {
+    } on ApiError catch (e) {
+      // 如果是401错误（未授权），自动停止更新
+      if (e.isUnauthorized) {
+        print('获取在线用户列表失败：未授权，停止自动更新');
+        stopOnlineUsersUpdate();
+      }
       rethrow;
     } catch (e) {
       throw ApiError.unknown('获取在线用户列表失败', e);
