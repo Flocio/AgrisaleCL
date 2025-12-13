@@ -6,7 +6,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../services/auth_service.dart';
 import '../services/user_status_service.dart';
 import '../services/auto_backup_service.dart';
-import '../repositories/settings_repository.dart';
 import '../models/api_error.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -31,7 +30,6 @@ class _LoginScreenState extends State<LoginScreen> {
   
   final AuthService _authService = AuthService();
   final UserStatusService _userStatusService = UserStatusService();
-  final SettingsRepository _settingsRepo = SettingsRepository();
 
   // 检查登录状态，如果已登录则自动跳转
   Future<void> _checkLoginStatus() async {
@@ -70,14 +68,16 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
   
-  // 启动自动备份服务（从 API 获取设置）
+  // 启动自动备份服务（从本地 SharedPreferences 获取设置）
   Future<void> _startAutoBackupService() async {
     try {
-      final settings = await _settingsRepo.getUserSettings();
+      final prefs = await SharedPreferences.getInstance();
+      final autoBackupEnabled = prefs.getBool('auto_backup_enabled') ?? false;
+      final autoBackupInterval = prefs.getInt('auto_backup_interval') ?? 15;
       
-      if (settings.isAutoBackupEnabled) {
-        await AutoBackupService().startAutoBackup(settings.autoBackupInterval);
-        print('自动备份服务已启动，间隔: ${settings.autoBackupInterval} 分钟');
+      if (autoBackupEnabled) {
+        await AutoBackupService().startAutoBackup(autoBackupInterval);
+        print('自动备份服务已启动，间隔: $autoBackupInterval 分钟');
       }
     } catch (e) {
       print('启动自动备份服务失败: $e');

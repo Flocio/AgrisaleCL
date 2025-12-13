@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../database_helper.dart';
 import '../repositories/product_repository.dart';
 import '../repositories/supplier_repository.dart';
 import '../repositories/customer_repository.dart';
@@ -174,13 +173,10 @@ class AutoBackupService {
       
       print('自动备份成功: $fileName');
       
-      // 更新最后备份时间（通过 API）
+      // 更新最后备份时间（保存到本地 SharedPreferences）
       try {
-        await _settingsRepo.updateUserSettings(
-          UserSettingsUpdate(
-            lastBackupTime: DateTime.now().toIso8601String(),
-          ),
-        );
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('last_backup_time', DateTime.now().toIso8601String());
       } catch (e) {
         print('更新备份时间失败: $e');
       }
@@ -303,9 +299,9 @@ class AutoBackupService {
   // 清理旧备份（保留指定数量）
   Future<void> _cleanOldBackups() async {
     try {
-      // 获取最大保留数量设置（通过 API）
-      final settings = await _settingsRepo.getUserSettings();
-      final maxCount = settings.autoBackupMaxCount ?? 20;
+      // 获取最大保留数量设置（从本地 SharedPreferences）
+      final prefs = await SharedPreferences.getInstance();
+      final maxCount = prefs.getInt('auto_backup_max_count') ?? 20;
       
       final backupList = await getBackupList();
       
@@ -321,8 +317,8 @@ class AutoBackupService {
     }
   }
 
-  // 恢复备份
-  Future<bool> restoreBackup(String filePath, int userId) async {
+  // 恢复备份（通过服务器 API 导入数据）
+  Future<bool> restoreBackup(String filePath) async {
     try {
       final file = File(filePath);
       if (!await file.exists()) {
@@ -331,216 +327,42 @@ class AutoBackupService {
       }
 
       final jsonString = await file.readAsString();
-      final Map<String, dynamic> importData = jsonDecode(jsonString);
+      final Map<String, dynamic> backupData = jsonDecode(jsonString);
       
       // 验证数据格式
-      if (!importData.containsKey('backupInfo') || !importData.containsKey('data')) {
+      if (!backupData.containsKey('backupInfo') || !backupData.containsKey('data')) {
         print('备份文件格式错误');
         return false;
       }
 
-      final data = importData['data'] as Map<String, dynamic>;
-      final db = await DatabaseHelper().database;
+      // 转换备份格式为导入格式（兼容 exportInfo 和 backupInfo）
+      final Map<String, dynamic> importData;
+      if (backupData.containsKey('backupInfo')) {
+        // 自动备份格式：backupInfo -> exportInfo
+        importData = {
+          'exportInfo': {
+            'username': backupData['backupInfo']['username'] ?? '未知',
+            'exportTime': backupData['backupInfo']['backupTime'] ?? DateTime.now().toIso8601String(),
+            'version': backupData['backupInfo']['version'] ?? '2.3.0',
+          },
+          'data': backupData['data'],
+        };
+      } else if (backupData.containsKey('exportInfo')) {
+        // 手动导出格式：直接使用
+        importData = backupData;
+      } else {
+        print('备份文件格式错误：缺少 backupInfo 或 exportInfo');
+        return false;
+      }
 
-      // 在事务中执行恢复
-      await db.transaction((txn) async {
-        // 删除当前用户的业务数据（不包括 user_settings）
-        await txn.delete('products', where: 'userId = ?', whereArgs: [userId]);
-        await txn.delete('suppliers', where: 'userId = ?', whereArgs: [userId]);
-        await txn.delete('customers', where: 'userId = ?', whereArgs: [userId]);
-        await txn.delete('employees', where: 'userId = ?', whereArgs: [userId]);
-        await txn.delete('purchases', where: 'userId = ?', whereArgs: [userId]);
-        await txn.delete('sales', where: 'userId = ?', whereArgs: [userId]);
-        await txn.delete('returns', where: 'userId = ?', whereArgs: [userId]);
-        await txn.delete('income', where: 'userId = ?', whereArgs: [userId]);
-        await txn.delete('remittance', where: 'userId = ?', whereArgs: [userId]);
-
-        // 创建ID映射表
-        Map<int, int> supplierIdMap = {};
-        Map<int, int> customerIdMap = {};
-        Map<int, int> productIdMap = {};
-        Map<int, int> employeeIdMap = {};
-
-        // 恢复suppliers数据
-        if (data['suppliers'] != null) {
-          for (var supplier in data['suppliers']) {
-            final supplierData = Map<String, dynamic>.from(supplier);
-            final originalId = supplierData['id'] as int;
-            supplierData.remove('id');
-            supplierData['userId'] = userId;
-            final newId = await txn.insert('suppliers', supplierData);
-            supplierIdMap[originalId] = newId;
-          }
-        }
-
-        // 恢复customers数据
-        if (data['customers'] != null) {
-          for (var customer in data['customers']) {
-            final customerData = Map<String, dynamic>.from(customer);
-            final originalId = customerData['id'] as int;
-            customerData.remove('id');
-            customerData['userId'] = userId;
-            final newId = await txn.insert('customers', customerData);
-            customerIdMap[originalId] = newId;
-          }
-        }
-
-        // 恢复employees数据
-        if (data['employees'] != null) {
-          for (var employee in data['employees']) {
-            final employeeData = Map<String, dynamic>.from(employee);
-            final originalId = employeeData['id'] as int;
-            employeeData.remove('id');
-            employeeData['userId'] = userId;
-            final newId = await txn.insert('employees', employeeData);
-            employeeIdMap[originalId] = newId;
-          }
-        }
-
-        // 恢复products数据
-        if (data['products'] != null) {
-          for (var product in data['products']) {
-            final productData = Map<String, dynamic>.from(product);
-            final originalId = productData['id'] as int;
-            productData.remove('id');
-            productData['userId'] = userId;
-            
-            // 更新supplierId关联关系
-            if (productData['supplierId'] != null) {
-              final originalSupplierId = productData['supplierId'] as int;
-              if (supplierIdMap.containsKey(originalSupplierId)) {
-                productData['supplierId'] = supplierIdMap[originalSupplierId];
-              } else {
-                productData['supplierId'] = null;
-              }
-            }
-            
-            final newId = await txn.insert('products', productData);
-            productIdMap[originalId] = newId;
-          }
-        }
-
-        // 恢复purchases数据
-        if (data['purchases'] != null) {
-          for (var purchase in data['purchases']) {
-            final purchaseData = Map<String, dynamic>.from(purchase);
-            purchaseData.remove('id');
-            purchaseData['userId'] = userId;
-            
-            if (purchaseData['supplierId'] != null) {
-              final originalSupplierId = purchaseData['supplierId'] as int;
-              if (supplierIdMap.containsKey(originalSupplierId)) {
-                purchaseData['supplierId'] = supplierIdMap[originalSupplierId];
-              } else {
-                purchaseData['supplierId'] = null;
-              }
-            }
-            
-            await txn.insert('purchases', purchaseData);
-          }
-        }
-
-        // 恢复sales数据
-        if (data['sales'] != null) {
-          for (var sale in data['sales']) {
-            final saleData = Map<String, dynamic>.from(sale);
-            saleData.remove('id');
-            saleData['userId'] = userId;
-            
-            if (saleData['customerId'] != null) {
-              final originalCustomerId = saleData['customerId'] as int;
-              if (customerIdMap.containsKey(originalCustomerId)) {
-                saleData['customerId'] = customerIdMap[originalCustomerId];
-              } else {
-                saleData['customerId'] = null;
-              }
-            }
-            
-            await txn.insert('sales', saleData);
-          }
-        }
-
-        // 恢复returns数据
-        if (data['returns'] != null) {
-          for (var returnItem in data['returns']) {
-            final returnData = Map<String, dynamic>.from(returnItem);
-            returnData.remove('id');
-            returnData['userId'] = userId;
-            
-            if (returnData['customerId'] != null) {
-              final originalCustomerId = returnData['customerId'] as int;
-              if (customerIdMap.containsKey(originalCustomerId)) {
-                returnData['customerId'] = customerIdMap[originalCustomerId];
-              } else {
-                returnData['customerId'] = null;
-              }
-            }
-            
-            await txn.insert('returns', returnData);
-          }
-        }
-
-        // 恢复income数据
-        if (data['income'] != null) {
-          for (var incomeItem in data['income']) {
-            final incomeData = Map<String, dynamic>.from(incomeItem);
-            incomeData.remove('id');
-            incomeData['userId'] = userId;
-            
-            if (incomeData['customerId'] != null) {
-              final originalCustomerId = incomeData['customerId'] as int;
-              if (customerIdMap.containsKey(originalCustomerId)) {
-                incomeData['customerId'] = customerIdMap[originalCustomerId];
-              } else {
-                incomeData['customerId'] = null;
-              }
-            }
-            
-            if (incomeData['employeeId'] != null) {
-              final originalEmployeeId = incomeData['employeeId'] as int;
-              if (employeeIdMap.containsKey(originalEmployeeId)) {
-                incomeData['employeeId'] = employeeIdMap[originalEmployeeId];
-              } else {
-                incomeData['employeeId'] = null;
-              }
-            }
-            
-            await txn.insert('income', incomeData);
-          }
-        }
-
-        // 恢复remittance数据
-        if (data['remittance'] != null) {
-          for (var remittanceItem in data['remittance']) {
-            final remittanceData = Map<String, dynamic>.from(remittanceItem);
-            remittanceData.remove('id');
-            remittanceData['userId'] = userId;
-            
-            if (remittanceData['supplierId'] != null) {
-              final originalSupplierId = remittanceData['supplierId'] as int;
-              if (supplierIdMap.containsKey(originalSupplierId)) {
-                remittanceData['supplierId'] = supplierIdMap[originalSupplierId];
-              } else {
-                remittanceData['supplierId'] = null;
-              }
-            }
-            
-            if (remittanceData['employeeId'] != null) {
-              final originalEmployeeId = remittanceData['employeeId'] as int;
-              if (employeeIdMap.containsKey(originalEmployeeId)) {
-                remittanceData['employeeId'] = employeeIdMap[originalEmployeeId];
-              } else {
-                remittanceData['employeeId'] = null;
-              }
-            }
-            
-            await txn.insert('remittance', remittanceData);
-          }
-        }
-      });
+      // 通过服务器 API 导入数据
+      await _settingsRepo.importData(importData);
 
       print('恢复备份成功');
       return true;
+    } on ApiError catch (e) {
+      print('恢复备份失败（API错误）: ${e.message}');
+      return false;
     } catch (e) {
       print('恢复备份失败: $e');
       return false;

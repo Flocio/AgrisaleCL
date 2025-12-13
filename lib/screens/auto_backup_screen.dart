@@ -2,8 +2,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/auto_backup_service.dart';
-import '../repositories/settings_repository.dart';
-import '../models/api_error.dart';
 import '../widgets/footer_widget.dart';
 
 class AutoBackupScreen extends StatefulWidget {
@@ -12,7 +10,6 @@ class AutoBackupScreen extends StatefulWidget {
 }
 
 class _AutoBackupScreenState extends State<AutoBackupScreen> {
-  final SettingsRepository _settingsRepo = SettingsRepository();
   
   // 自动备份设置
   bool _autoBackupEnabled = false;
@@ -46,33 +43,21 @@ class _AutoBackupScreenState extends State<AutoBackupScreen> {
     });
   }
 
-  // 加载自动备份设置
+  // 加载自动备份设置（从本地 SharedPreferences）
   Future<void> _loadBackupSettings() async {
     setState(() {
       _isLoading = true;
     });
     
     try {
-      final settings = await _settingsRepo.getUserSettings();
+      final prefs = await SharedPreferences.getInstance();
       setState(() {
-        _autoBackupEnabled = settings.isAutoBackupEnabled;
-        _autoBackupInterval = settings.autoBackupInterval;
-        _autoBackupMaxCount = settings.autoBackupMaxCount;
-        _lastBackupTime = settings.lastBackupTime;
+        _autoBackupEnabled = prefs.getBool('auto_backup_enabled') ?? false;
+        _autoBackupInterval = prefs.getInt('auto_backup_interval') ?? 15;
+        _autoBackupMaxCount = prefs.getInt('auto_backup_max_count') ?? 20;
+        _lastBackupTime = prefs.getString('last_backup_time');
         _isLoading = false;
       });
-    } on ApiError catch (e) {
-      setState(() {
-        _isLoading = false;
-      });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('加载设置失败: ${e.message}'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
     } catch (e) {
       setState(() {
         _isLoading = false;
@@ -100,24 +85,15 @@ class _AutoBackupScreenState extends State<AutoBackupScreen> {
     }
   }
   
-  // 保存自动备份设置
+  // 保存自动备份设置（到本地 SharedPreferences）
   Future<void> _saveBackupSettings() async {
     try {
-      await _settingsRepo.updateUserSettings(
-        UserSettingsUpdate(
-          autoBackupEnabled: _autoBackupEnabled ? 1 : 0,
-          autoBackupInterval: _autoBackupInterval,
-          autoBackupMaxCount: _autoBackupMaxCount,
-        ),
-      );
-    } on ApiError catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('保存设置失败: ${e.message}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('auto_backup_enabled', _autoBackupEnabled);
+      await prefs.setInt('auto_backup_interval', _autoBackupInterval);
+      await prefs.setInt('auto_backup_max_count', _autoBackupMaxCount);
+      if (_lastBackupTime != null) {
+        await prefs.setString('last_backup_time', _lastBackupTime!);
       }
     } catch (e) {
       if (mounted) {

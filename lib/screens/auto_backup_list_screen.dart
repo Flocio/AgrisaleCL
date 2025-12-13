@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../services/auto_backup_service.dart';
-import '../database_helper.dart';
 import '../services/auth_service.dart';
 import '../widgets/footer_widget.dart';
 
@@ -210,28 +208,8 @@ class _AutoBackupListScreenState extends State<AutoBackupListScreen> {
           return;
         }
 
-        // 注意：restoreBackup 仍然需要 userId，但我们现在从 API 获取用户信息
-        // 由于 restoreBackup 需要写入本地数据库，我们仍然需要本地 userId
-        // 这里暂时保留使用 DatabaseHelper，因为恢复操作需要本地数据库
-        final prefs = await SharedPreferences.getInstance();
-        final username = prefs.getString('current_username');
-        int? userId;
-        
-        if (username != null) {
-          // 为了兼容 restoreBackup 方法，仍然需要从本地数据库获取 userId
-          // 因为恢复操作需要写入本地数据库
-          userId = await DatabaseHelper().getCurrentUserId(username);
-        }
-        
-        if (userId == null) {
-          Navigator.of(context).pop();
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('用户信息错误')),
-          );
-          return;
-        }
-
-        final success = await _backupService.restoreBackup(backup['path'], userId);
+        // 通过服务器 API 恢复备份（不再需要本地 userId）
+        final success = await _backupService.restoreBackup(backup['path']);
         Navigator.of(context).pop(); // 关闭加载对话框
 
         if (success) {
