@@ -19,6 +19,7 @@ class _ModelSettingsScreenState extends State<ModelSettingsScreen> {
   String _apiKey = '';
   final _apiKeyController = TextEditingController();
   bool _obscureApiKey = true;
+  bool _isLoading = true; // 添加加载状态
   
   final List<String> _availableModels = [
     'deepseek-chat',
@@ -39,6 +40,10 @@ class _ModelSettingsScreenState extends State<ModelSettingsScreen> {
   }
 
   Future<void> _loadModelSettings() async {
+    setState(() {
+      _isLoading = true; // 开始加载
+    });
+    
     try {
       final settings = await _settingsRepo.getUserSettings();
       setState(() {
@@ -47,8 +52,12 @@ class _ModelSettingsScreenState extends State<ModelSettingsScreen> {
         _selectedModel = settings.deepseekModel;
         _apiKey = settings.deepseekApiKey ?? '';
         _apiKeyController.text = _apiKey;
+        _isLoading = false; // 加载完成
       });
     } on ApiError catch (e) {
+      setState(() {
+        _isLoading = false; // 即使失败也要停止加载状态
+      });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -58,6 +67,9 @@ class _ModelSettingsScreenState extends State<ModelSettingsScreen> {
         );
       }
     } catch (e) {
+      setState(() {
+        _isLoading = false; // 即使失败也要停止加载状态
+      });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -156,7 +168,11 @@ class _ModelSettingsScreenState extends State<ModelSettingsScreen> {
           )
         ),
       ),
-      body: SingleChildScrollView(
+      body: _isLoading
+          ? Center(
+              child: CircularProgressIndicator(),
+            )
+          : SingleChildScrollView(
         padding: EdgeInsets.all(16.0),
         child: Card(
           child: Padding(
