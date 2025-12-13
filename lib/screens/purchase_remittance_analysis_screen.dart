@@ -374,7 +374,7 @@ class _PurchaseRemittanceAnalysisScreenState extends State<PurchaseRemittanceAna
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('采购-汇款明细', style: TextStyle(
+        title: Text('采购与汇款', style: TextStyle(
           fontWeight: FontWeight.bold,
           color: Colors.white,
         )),

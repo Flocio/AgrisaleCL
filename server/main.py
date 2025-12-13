@@ -86,9 +86,9 @@ async def lifespan(app: FastAPI):
 
 # 创建 FastAPI 应用实例
 app = FastAPI(
-    title="农资管理系统 API",
-    description="农资管理系统后端 API 服务",
-    version="2.3.0",
+    title="AgrisaleCL API",
+    description="AgrisaleCL后端 API 服务",
+    version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
     lifespan=lifespan
@@ -120,8 +120,8 @@ async def root():
     根路径，返回 API 信息
     """
     return {
-        "name": "农资管理系统 API",
-        "version": "2.3.0",
+        "name": "AgrisaleCL API",
+        "version": "1.0.0",
         "status": "running",
         "docs": "/docs",
         "redoc": "/redoc"
@@ -145,7 +145,7 @@ async def health_check():
             content={
                 "status": "healthy",
                 "database": "connected",
-                "version": "2.3.0"
+                "version": "1.0.0"
             }
         )
     except Exception as e:
@@ -166,9 +166,9 @@ async def api_info():
     获取 API 信息
     """
     return {
-        "name": "农资管理系统 API",
-        "version": "2.3.0",
-        "description": "农资管理系统后端 API 服务",
+        "name": "AgrisaleCL API",
+        "version": "1.0.0",
+        "description": "AgrisaleCL后端 API 服务",
         "endpoints": {
             "auth": "/api/auth",
             "users": "/api/users",

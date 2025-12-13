@@ -719,27 +719,35 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                   ? Center(child: CircularProgressIndicator())
                   : _filteredPurchases.isEmpty
                   ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.shopping_cart, size: 64, color: Colors.grey[400]),
-                          SizedBox(height: 16),
-                          Text(
-                            _isSearching ? '没有匹配的采购记录' : '暂无采购记录',
-                            style: TextStyle(
-                              fontSize: 18,
-                              color: Colors.grey[600],
-                            ),
+                      child: SingleChildScrollView(
+                        child: Padding(
+                          padding: EdgeInsets.all(16),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.shopping_cart, size: 64, color: Colors.grey[400]),
+                              SizedBox(height: 16),
+                              Text(
+                                _isSearching ? '没有匹配的采购记录' : '暂无采购记录',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  color: Colors.grey[600],
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                              SizedBox(height: 8),
+                              Text(
+                                _isSearching ? '请尝试其他搜索条件' : '点击下方 + 按钮添加采购记录',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey[500],
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
                           ),
-                          SizedBox(height: 8),
-                          Text(
-                            _isSearching ? '请尝试其他搜索条件' : '点击下方 + 按钮添加采购记录',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.grey[500],
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
                     )
                   : ListView.builder(
@@ -832,17 +840,6 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                                               padding: EdgeInsets.zero,
                                               constraints: BoxConstraints(),
                                               iconSize: 18,
-                                            ),
-                                            Padding(
-                                              padding: const EdgeInsets.only(left: 8),
-                                              child: IconButton(
-                                              icon: Icon(Icons.note_alt_outlined, color: Colors.blue),
-                                              tooltip: '编辑备注',
-                                              onPressed: () => _showNoteDialog(purchase),
-                                              padding: EdgeInsets.zero,
-                                              constraints: BoxConstraints(),
-                                              iconSize: 18,
-                                              ),
                                             ),
                                             if (_showDeleteButtons)
                                               Padding(

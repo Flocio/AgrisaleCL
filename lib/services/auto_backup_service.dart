@@ -144,7 +144,7 @@ class AutoBackupService {
           'type': 'auto_backup',
           'username': username,
           'backupTime': DateTime.now().toIso8601String(),
-          'version': '2.3.0',
+          'version': '1.0.0',
         },
         'data': {
           'products': products,
@@ -343,7 +343,7 @@ class AutoBackupService {
           'exportInfo': {
             'username': backupData['backupInfo']['username'] ?? '未知',
             'exportTime': backupData['backupInfo']['backupTime'] ?? DateTime.now().toIso8601String(),
-            'version': backupData['backupInfo']['version'] ?? '2.3.0',
+            'version': backupData['backupInfo']['version'] ?? '1.0.0',
           },
           'data': backupData['data'],
         };

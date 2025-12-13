@@ -9,6 +9,8 @@ import 'package:file_picker/file_picker.dart';
 import 'dart:io';
 import 'package:csv/csv.dart';
 import 'package:table_calendar/table_calendar.dart';
+import 'package:intl/intl.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import '../widgets/footer_widget.dart';
 import '../repositories/sale_repository.dart';
 import '../repositories/return_repository.dart';
@@ -365,15 +367,20 @@ class _FinancialStatisticsScreenState extends State<FinancialStatisticsScreen> {
             title: Text(_currentIndex == 0 ? '选择日期' : '选择月份'),
             content: Container(
               width: double.maxFinite,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (_currentIndex == 0)
-                  // 每日统计使用常规日历
-                  TableCalendar(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.7,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_currentIndex == 0)
+                    // 每日统计使用常规日历
+                    TableCalendar(
                     firstDay: DateTime.utc(2020, 1, 1),
                     lastDay: DateTime.utc(2030, 12, 31),
                     focusedDay: focusedDay,
+                    locale: 'zh_CN', // 设置为中文
                     selectedDayPredicate: (day) {
                       return selectedDay != null && isSameDay(selectedDay!, day);
                     },
@@ -506,18 +513,19 @@ class _FinancialStatisticsScreenState extends State<FinancialStatisticsScreen> {
                       },
                     ),
                   ),
-                  SizedBox(height: 16),
-                  Text(
-                    _currentIndex == 0 
-                        ? '绿色边框表示有交易记录'
-                        : '绿色边框表示该月有交易记录',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey[600],
-                      fontStyle: FontStyle.italic,
+                    SizedBox(height: 16),
+                    Text(
+                      _currentIndex == 0 
+                          ? '绿色边框表示有交易记录'
+                          : '绿色边框表示该月有交易记录',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[600],
+                        fontStyle: FontStyle.italic,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
             actions: [

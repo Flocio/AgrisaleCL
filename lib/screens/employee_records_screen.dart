@@ -679,29 +679,37 @@ class _EmployeeRecordsScreenState extends State<EmployeeRecordsScreen> {
           _records.isEmpty 
               ? Expanded(
                   child: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.receipt_long, size: 64, color: Colors.grey[400]),
-                        SizedBox(height: 16),
-                        Text(
-                          '暂无业务记录',
-                          style: TextStyle(
-                            fontSize: 18,
-                            color: Colors.grey[600],
-                          ),
+                    child: SingleChildScrollView(
+                      child: Padding(
+                        padding: EdgeInsets.all(16),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.receipt_long, size: 64, color: Colors.grey[400]),
+                            SizedBox(height: 16),
+                            Text(
+                              '暂无业务记录',
+                              style: TextStyle(
+                                fontSize: 18,
+                                color: Colors.grey[600],
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                            SizedBox(height: 8),
+                            Text(
+                              _selectedType == '所有类型' 
+                                  ? '该员工还没有经办进账或汇款记录'
+                                  : '该员工还没有经办 $_selectedType 记录',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey[500],
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
                         ),
-                        SizedBox(height: 8),
-                        Text(
-                          _selectedType == '所有类型' 
-                              ? '该员工还没有经办进账或汇款记录'
-                              : '该员工还没有经办 $_selectedType 记录',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey[500],
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
                   ),
                 )

@@ -30,6 +30,8 @@ import 'screens/data_assistant_screen.dart';
 import 'screens/auto_backup_screen.dart';
 import 'screens/auto_backup_list_screen.dart';
 import 'screens/server_config_screen.dart';
+import 'screens/version_info_screen.dart';
+import 'screens/model_settings_screen.dart';
 import 'services/api_service.dart';
 import 'services/auth_service.dart';
 
@@ -89,7 +91,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: '农资管理系统',
+      title: 'AgrisaleCL',
       // 配置中文本地化
       localizationsDelegates: [
         GlobalMaterialLocalizations.delegate,
@@ -170,6 +172,8 @@ class MyApp extends StatelessWidget {
         '/auto_backup': (context) => AutoBackupScreen(),
         '/auto_backup_list': (context) => AutoBackupListScreen(),
         '/server_config': (context) => ServerConfigScreen(),
+        '/version_info': (context) => VersionInfoScreen(),
+        '/model_settings': (context) => ModelSettingsScreen(),
       },
     );
   }

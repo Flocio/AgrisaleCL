@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; // 导入剪贴板功能
 import 'package:http/http.dart' as http;
@@ -201,6 +203,34 @@ class _DataAssistantScreenState extends State<DataAssistantScreen> {
     });
   }
 
+  // 更新最后一条助手消息的内容（用于流式输出）
+  void _updateLastAssistantMessage(String content) {
+    setState(() {
+      if (_chatHistory.isNotEmpty && 
+          _chatHistory.last['role'] == 'assistant') {
+        _chatHistory.last['content'] = content;
+      }
+    });
+    
+    // 自动滚动到底部
+    Future.delayed(Duration(milliseconds: 50), () {
+      if (_scrollController.hasClients) {
+        _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+      }
+    });
+  }
+
+  // 开始流式助手消息（创建空消息用于后续更新）
+  void _startAssistantMessage() {
+    setState(() {
+      _chatHistory.add({
+        'role': 'assistant',
+        'content': '',
+      });
+      _isLoading = true;
+    });
+  }
+
   // 复制文本到剪贴板
   Future<void> _copyToClipboard(String text) async {
     await Clipboard.setData(ClipboardData(text: text));
@@ -374,7 +404,7 @@ class _DataAssistantScreenState extends State<DataAssistantScreen> {
         {
           'role': 'system',
           'content': '''
-你是农资管理系统的数据分析助手。你可以分析系统中的产品、销售、采购、库存、员工、进账、汇款等数据，并回答用户的问题。
+你是AgrisaleCL的数据分析助手。你可以分析系统中的产品、销售、采购、库存、员工、进账、汇款等数据，并回答用户的问题。
 
 系统包含以下数据表：
 1. users - 系统用户表
@@ -414,34 +444,153 @@ $systemDataJson
         }
       }
       
-      // 发送API请求，使用用户设置的参数
-      final response = await http.post(
-        Uri.parse('https://api.deepseek.com/v1/chat/completions'),
-        headers: {
-          'Content-Type': 'application/json; charset=utf-8',
-          'Authorization': 'Bearer $apiKey',
-        },
-        body: jsonEncode({
+      // 开始流式消息
+      _startAssistantMessage();
+      
+      // 使用流式请求
+      try {
+        final client = HttpClient();
+        final request = await client.postUrl(
+          Uri.parse('https://api.deepseek.com/v1/chat/completions'),
+        );
+        
+        request.headers.set('Content-Type', 'application/json; charset=utf-8');
+        request.headers.set('Authorization', 'Bearer $apiKey');
+        
+        final requestBody = jsonEncode({
           'model': model,
           'messages': messages,
           'temperature': temperature,
           'max_tokens': maxTokens,
+          'stream': true, // 启用流式输出
           'response_format': {'type': 'text'}, // 确保响应为纯文本
-        }),
-      ).timeout(
-        Duration(seconds: 30), // 30秒超时
-        onTimeout: () {
-          throw Exception('请求超时：DeepSeek API响应时间过长，请稍后重试');
-        },
-      );
-      
-      if (response.statusCode == 200) {
-        final data = jsonDecode(utf8.decode(response.bodyBytes));
-        final assistantResponse = data['choices'][0]['message']['content'];
-        _addAssistantMessage(assistantResponse);
-      } else {
-        final errorBody = utf8.decode(response.bodyBytes);
-        _addAssistantMessage('抱歉，API请求失败。\n错误代码: ${response.statusCode}\n错误详情: $errorBody');
+        });
+        
+        request.write(requestBody);
+        final response = await request.close().timeout(
+          Duration(seconds: 60), // 流式请求需要更长的超时时间
+          onTimeout: () {
+            client.close();
+            throw Exception('请求超时：DeepSeek API响应时间过长，请稍后重试');
+          },
+        );
+        
+        if (response.statusCode == 200) {
+          String accumulatedContent = '';
+          String buffer = ''; // 用于处理跨行的数据块
+          
+          // 处理流式响应
+          await for (final data in response.transform(utf8.decoder)) {
+            buffer += data;
+            final lines = buffer.split('\n');
+            
+            // 保留最后一个不完整的行（如果有）
+            buffer = lines.last;
+            
+            // 处理完整的行
+            for (int i = 0; i < lines.length - 1; i++) {
+              final line = lines[i].trim();
+              
+              if (line.startsWith('data: ')) {
+                final jsonStr = line.substring(6); // 移除 'data: ' 前缀
+                
+                if (jsonStr.trim() == '[DONE]') {
+                  // 流式输出完成
+                  setState(() {
+                    _isLoading = false;
+                  });
+                  _saveChatHistory();
+                  break;
+                }
+                
+                if (jsonStr.trim().isEmpty) {
+                  continue; // 跳过空数据
+                }
+                
+                try {
+                  final chunk = jsonDecode(jsonStr);
+                  final delta = chunk['choices']?[0]?['delta'];
+                  
+                  if (delta != null && delta['content'] != null) {
+                    accumulatedContent += delta['content'];
+                    _updateLastAssistantMessage(accumulatedContent);
+                  }
+                } catch (e) {
+                  // 忽略解析错误，继续处理下一个数据块
+                  print('解析流式数据块失败: $e, jsonStr: $jsonStr');
+                }
+              }
+            }
+          }
+          
+          // 确保最终保存
+          if (accumulatedContent.isNotEmpty) {
+            setState(() {
+              _isLoading = false;
+            });
+            _saveChatHistory();
+          } else {
+            // 如果没有收到任何内容，移除空消息
+            setState(() {
+              _isLoading = false;
+              if (_chatHistory.isNotEmpty && 
+                  _chatHistory.last['role'] == 'assistant' &&
+                  _chatHistory.last['content'] == '') {
+                _chatHistory.removeLast();
+              }
+            });
+            _addAssistantMessage('抱歉，没有收到任何回复内容。');
+          }
+        } else {
+          // 读取错误响应
+          final errorBody = await response.transform(utf8.decoder).join();
+          setState(() {
+            _isLoading = false;
+            if (_chatHistory.isNotEmpty && 
+                _chatHistory.last['role'] == 'assistant' &&
+                _chatHistory.last['content'] == '') {
+              _chatHistory.removeLast();
+            }
+          });
+          _addAssistantMessage('抱歉，API请求失败。\n错误代码: ${response.statusCode}\n错误详情: $errorBody');
+        }
+        
+        client.close();
+      } on SocketException catch (e) {
+        setState(() {
+          _isLoading = false;
+          if (_chatHistory.isNotEmpty && 
+              _chatHistory.last['role'] == 'assistant' &&
+              _chatHistory.last['content'] == '') {
+            _chatHistory.removeLast();
+          }
+        });
+        _addAssistantMessage('网络连接失败，请检查：\n'
+                           '1. 网络连接是否正常\n'
+                           '2. 是否使用了代理服务器\n'
+                           '3. API密钥是否正确\n'
+                           '4. 防火墙是否阻止了连接\n\n'
+                           '详细错误: $e');
+      } on TimeoutException catch (e) {
+        setState(() {
+          _isLoading = false;
+          if (_chatHistory.isNotEmpty && 
+              _chatHistory.last['role'] == 'assistant' &&
+              _chatHistory.last['content'] == '') {
+            _chatHistory.removeLast();
+          }
+        });
+        _addAssistantMessage('请求超时，请稍后重试。\n详细错误: $e');
+      } catch (e) {
+        setState(() {
+          _isLoading = false;
+          if (_chatHistory.isNotEmpty && 
+              _chatHistory.last['role'] == 'assistant' &&
+              _chatHistory.last['content'] == '') {
+            _chatHistory.removeLast();
+          }
+        });
+        _addAssistantMessage('抱歉，发生了错误: $e');
       }
     } catch (e) {
       String errorMessage = '抱歉，发生了错误: ';
