@@ -15,6 +15,9 @@ else
 fi
 
 # 设置环境变量（可选，也可以从 .env 文件读取）
+# 默认路径为 data/agrisalecl.db（相对于server目录）
+# 如果从项目根目录运行，会自动解析为 server/data/agrisalecl.db
+# 如果server目录是独立的，使用 data/agrisalecl.db
 export DB_PATH="${DB_PATH:-data/agrisalecl.db}"
 export DB_MAX_CONNECTIONS="${DB_MAX_CONNECTIONS:-10}"
 export DB_BUSY_TIMEOUT="${DB_BUSY_TIMEOUT:-5000}"

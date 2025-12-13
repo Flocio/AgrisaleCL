@@ -34,6 +34,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # 从环境变量获取配置，如果没有则使用默认值
+# 默认路径为 data/agrisalecl.db，相对于server目录
+# 如果从项目根目录运行，可以使用 server/data/agrisalecl.db
+# 如果server目录是独立的，使用 data/agrisalecl.db
 DB_PATH = os.getenv("DB_PATH", "data/agrisalecl.db")
 DB_MAX_CONNECTIONS = int(os.getenv("DB_MAX_CONNECTIONS", "10"))
 DB_BUSY_TIMEOUT = int(os.getenv("DB_BUSY_TIMEOUT", "5000"))
@@ -78,8 +81,9 @@ async def lifespan(app: FastAPI):
     logger.info("正在关闭应用...")
     try:
         pool = get_pool()
-        pool.close()
-        logger.info("数据库连接池已关闭")
+        if pool:
+            pool.close_all()
+            logger.info("数据库连接池已关闭")
     except Exception as e:
         logger.error(f"关闭数据库连接池时出错: {e}")
 

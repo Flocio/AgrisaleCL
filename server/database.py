@@ -12,6 +12,7 @@ from queue import Queue, Empty
 from typing import Optional, Callable, Any
 from pathlib import Path
 import os
+import sys
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
@@ -671,6 +672,44 @@ class SQLiteConnectionPool:
 _pool: Optional[SQLiteConnectionPool] = None
 
 
+def _resolve_db_path(db_path: str) -> str:
+    """
+    解析数据库路径，确保无论server目录在何处都能正确找到data目录
+    
+    如果路径是相对路径，会尝试以下方式解析：
+    1. 如果路径以 "server/" 开头，尝试相对于项目根目录（当前工作目录）
+    2. 如果路径以 "data/" 开头，尝试相对于server目录（通过查找server模块位置）
+    3. 否则，尝试相对于当前工作目录
+    
+    Args:
+        db_path: 数据库文件路径（相对或绝对路径）
+    
+    Returns:
+        解析后的绝对路径
+    """
+    # 如果是绝对路径，直接返回
+    if os.path.isabs(db_path):
+        return db_path
+    
+    # 如果路径以 "server/" 开头，尝试相对于项目根目录（当前工作目录）
+    if db_path.startswith("server/"):
+        abs_path = os.path.abspath(db_path)
+        if os.path.exists(os.path.dirname(abs_path)) or os.path.exists(abs_path):
+            return abs_path
+    
+    # 如果路径以 "data/" 开头，尝试相对于server目录
+    if db_path.startswith("data/"):
+        # 获取server模块的目录
+        server_module = sys.modules.get('server')
+        if server_module and hasattr(server_module, '__file__'):
+            server_dir = os.path.dirname(os.path.abspath(server_module.__file__))
+            abs_path = os.path.join(server_dir, db_path)
+            return abs_path
+    
+    # 默认：相对于当前工作目录
+    return os.path.abspath(db_path)
+
+
 def init_database(
     db_path: str = "data/agrisalecl.db",
     max_connections: int = 10,
@@ -680,7 +719,7 @@ def init_database(
     初始化全局数据库连接池
     
     Args:
-        db_path: 数据库文件路径
+        db_path: 数据库文件路径（相对路径，相对于server目录，或绝对路径）
         max_connections: 最大连接数
         **kwargs: 其他连接池参数
     
@@ -689,7 +728,9 @@ def init_database(
     """
     global _pool
     if _pool is None:
-        _pool = SQLiteConnectionPool(db_path, max_connections, **kwargs)
+        # 解析路径，确保无论server目录在何处都能正确找到
+        resolved_path = _resolve_db_path(db_path)
+        _pool = SQLiteConnectionPool(resolved_path, max_connections, **kwargs)
     return _pool
 
 
