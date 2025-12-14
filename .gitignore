@@ -108,10 +108,12 @@ app.*.map.json
 **/android/gradlew.bat
 **/android/local.properties
 **/android/**/GeneratedPluginRegistrant.java
+
+# Android signing (keystore and credentials - DO NOT COMMIT)
 **/android/key.properties
 *.jks
 *.jks.base64
-agrisale-release.jks.base64
+*.jks.backup
 
 # Database files (you may want to keep sample data, so adjust as needed)
 *.db
