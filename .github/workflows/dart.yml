@@ -8,7 +8,7 @@ on:
 
 env:
   FLUTTER_VERSION: "3.24.0"
-  VERSION_TAG: "v1.1.1"
+  VERSION_TAG: "v1.1.2"
 
 jobs:
   # iOS 构建
@@ -194,6 +194,20 @@ jobs:
           else:
               print(f'警告: 未找到 AndroidManifest.xml: {manifest_path}')
           PYEOF
+
+      - name: Restore Android keystore
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > android/app/agrisale-release.jks
+          chmod 600 android/app/agrisale-release.jks
+
+      - name: Create key.properties
+        run: |
+          cat <<EOF > android/key.properties
+          storePassword=${{ secrets.ANDROID_STORE_PASSWORD }}
+          keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
+          keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
+          storeFile=agrisale-release.jks
+          EOF
 
       - name: Build Android APK
         run: flutter build apk --release
