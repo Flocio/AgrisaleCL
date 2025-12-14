@@ -202,12 +202,10 @@ jobs:
 
       - name: Create key.properties
         run: |
-          cat <<EOF > android/key.properties
-          storePassword=${{ secrets.ANDROID_STORE_PASSWORD }}
-          keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
-          keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
-          storeFile=agrisale-release.jks
-          EOF
+          echo "storePassword=${{ secrets.ANDROID_STORE_PASSWORD }}" > android/key.properties
+          echo "keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}" >> android/key.properties
+          echo "keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}" >> android/key.properties
+          echo "storeFile=agrisale-release.jks" >> android/key.properties
 
       - name: Build Android APK
         run: flutter build apk --release
