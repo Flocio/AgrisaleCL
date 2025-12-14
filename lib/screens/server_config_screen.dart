@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 import '../services/api_service.dart';
 import '../models/api_error.dart';
-import 'dart:io';
 
 class ServerConfigScreen extends StatefulWidget {
   @override
@@ -33,7 +36,8 @@ class _ServerConfigScreenState extends State<ServerConfigScreen> {
   Future<void> _loadCurrentServerUrl() async {
     final prefs = await SharedPreferences.getInstance();
     final serverUrl = prefs.getString('server_url');
-    final defaultUrl = 'http://192.168.10.12:8000';
+    // 默认使用 HTTPS 地址（内网穿透），同时支持内网和外网访问
+    final defaultUrl = 'https://agrisalecl.drflo.org';
     setState(() {
       _currentServerUrl = serverUrl ?? defaultUrl;
       _serverUrlController.text = _currentServerUrl ?? defaultUrl;
@@ -53,37 +57,56 @@ class _ServerConfigScreenState extends State<ServerConfigScreen> {
 
     try {
       final testUrl = _serverUrlController.text.trim();
-      final apiService = ApiService();
-      final originalUrl = apiService.baseUrl;
       
-      // 临时设置测试URL
-      apiService.setBaseUrl(testUrl);
+      // 直接使用 HTTP 请求测试，不通过 ApiService（避免格式问题）
+      final uri = Uri.parse('$testUrl/health');
+      final response = await http.get(
+        uri,
+        headers: {
+          'Accept': 'application/json',
+        },
+      ).timeout(Duration(seconds: 10));
       
-      // 测试连接
-      final response = await apiService.get<Map<String, dynamic>>(
-        '/health',
-        fromJsonT: (json) => json as Map<String, dynamic>,
-      );
-      
-      if (response.isSuccess && response.data != null && response.data!['status'] == 'healthy') {
+      if (response.statusCode == 200) {
+        try {
+          final json = jsonDecode(response.body) as Map<String, dynamic>;
+          final status = json['status'] as String?;
+          
+          if (status == 'healthy') {
+            setState(() {
+              _testResult = '连接成功！服务器运行正常';
+            });
+          } else {
+            setState(() {
+              _testResult = '连接成功，但服务器状态异常：$status';
+            });
+          }
+        } catch (e) {
+          // 如果响应不是 JSON，但状态码是 200，也算成功
+          setState(() {
+            _testResult = '连接成功！服务器响应正常（状态码：${response.statusCode}）';
+          });
+        }
+      } else if (response.statusCode == 503) {
         setState(() {
-          _testResult = '连接成功！服务器运行正常';
+          _testResult = '连接成功，但服务器健康检查失败（数据库可能未连接）';
         });
       } else {
         setState(() {
-          _testResult = '连接失败：服务器响应异常';
+          _testResult = '连接失败：服务器返回错误（状态码：${response.statusCode}）';
         });
       }
-      
-      // 恢复原始URL
-      apiService.setBaseUrl(originalUrl);
-    } on ApiError catch (e) {
+    } on TimeoutException {
       setState(() {
-        _testResult = '连接失败：${e.message}';
+        _testResult = '连接失败：请求超时，请检查服务器地址和网络连接';
       });
     } on SocketException catch (e) {
       setState(() {
-        _testResult = '连接失败：无法连接到服务器，请检查地址和网络';
+        _testResult = '连接失败：无法连接到服务器，请检查：\n1. 服务器地址是否正确\n2. 是否与服务器在同一网络（内网）\n3. 防火墙是否阻止连接';
+      });
+    } on FormatException catch (e) {
+      setState(() {
+        _testResult = '连接失败：服务器地址格式不正确';
       });
     } catch (e) {
       setState(() {
@@ -172,7 +195,12 @@ class _ServerConfigScreenState extends State<ServerConfigScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('服务器配置', style: TextStyle(color: Colors.white)),
+        title: Text('服务器配置',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
       ),
       body: Form(
         key: _formKey,
@@ -204,12 +232,12 @@ class _ServerConfigScreenState extends State<ServerConfigScreen> {
                     ),
                     SizedBox(height: 12),
                     Text(
-                      '• 局域网内访问：使用内网IP，如 http://192.168.10.12:8000',
+                      '• HTTPS 地址：https://agrisalecl.drflo.org（内网穿透）',
                       style: TextStyle(fontSize: 13, color: Colors.blue[800]),
                     ),
                     SizedBox(height: 6),
                     Text(
-                      '• 外网访问：使用内网穿透地址，如 http://your-domain.ngrok.io',
+                      '• 局域网地址：http://192.168.10.12:8000（同一WiFi下）',
                       style: TextStyle(fontSize: 13, color: Colors.blue[800]),
                     ),
                     SizedBox(height: 6),
@@ -236,15 +264,20 @@ class _ServerConfigScreenState extends State<ServerConfigScreen> {
               ),
               SizedBox(height: 8),
               Container(
-                padding: EdgeInsets.all(12),
+                padding: EdgeInsets.symmetric(vertical: 0, horizontal: 16),
                 decoration: BoxDecoration(
-                  color: Colors.grey[100],
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.grey[300]!),
+                  color: Colors.grey[50],
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: Colors.grey[200]!, style: BorderStyle.solid, width: 1),
                 ),
-                child: Text(
-                  _currentServerUrl!,
-                  style: TextStyle(fontSize: 14, color: Colors.grey[800]),
+                child: TextField(
+                  controller: TextEditingController(text: _currentServerUrl),
+                  enabled: false,
+                  decoration: InputDecoration(
+                    border: InputBorder.none,
+                    contentPadding: EdgeInsets.symmetric(vertical: 12, horizontal: 0),
+                  ),
+                  style: TextStyle(fontSize: 16, color: Colors.grey[600]),
                 ),
               ),
               SizedBox(height: 24),
@@ -262,14 +295,24 @@ class _ServerConfigScreenState extends State<ServerConfigScreen> {
             SizedBox(height: 8),
             TextFormField(
               controller: _serverUrlController,
+              style: TextStyle(fontSize: 16, color: Colors.grey[800]),
               decoration: InputDecoration(
-                hintText: 'http://192.168.10.12:8000',
-                prefixIcon: Icon(Icons.dns),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
+                hintText: 'https://agrisalecl.drflo.org',
+                contentPadding: EdgeInsets.symmetric(vertical: 0, horizontal: 16),
                 filled: true,
                 fillColor: Colors.grey[100],
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(24),
+                  borderSide: BorderSide(color: Colors.grey[300]!),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(24),
+                  borderSide: BorderSide(color: Colors.grey[300]!),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(24),
+                  borderSide: BorderSide(color: Colors.green),
+                ),
               ),
               keyboardType: TextInputType.url,
               validator: _validateUrl,
@@ -279,27 +322,28 @@ class _ServerConfigScreenState extends State<ServerConfigScreen> {
             SizedBox(height: 16),
             
             // 测试连接按钮
-            ElevatedButton.icon(
+            ElevatedButton(
               onPressed: _isTesting ? null : _testConnection,
-              icon: _isTesting
-                  ? SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                      ),
-                    )
-                  : Icon(Icons.network_check),
-              label: Text(_isTesting ? '测试中...' : '测试连接'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue,
-                foregroundColor: Colors.white,
-                padding: EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
+                minimumSize: Size(double.infinity, 50),
               ),
+              child: _isTesting
+                  ? Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        ),
+                        SizedBox(width: 12),
+                        Text('测试中...', style: TextStyle(fontSize: 16)),
+                      ],
+                    )
+                  : Text('测试连接', style: TextStyle(fontSize: 16)),
             ),
             
             // 测试结果
@@ -352,26 +396,25 @@ class _ServerConfigScreenState extends State<ServerConfigScreen> {
             ElevatedButton(
               onPressed: _isLoading ? null : _saveServerUrl,
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
-                foregroundColor: Colors.white,
-                padding: EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
+                minimumSize: Size(double.infinity, 50),
               ),
               child: _isLoading
-                  ? SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                      ),
+                  ? Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        ),
+                        SizedBox(width: 12),
+                        Text('保存中...', style: TextStyle(fontSize: 16)),
+                      ],
                     )
-                  : Text(
-                      '保存配置',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
+                  : Text('保存配置', style: TextStyle(fontSize: 16)),
             ),
             
             SizedBox(height: 16),
@@ -391,14 +434,22 @@ class _ServerConfigScreenState extends State<ServerConfigScreen> {
               runSpacing: 8,
               children: [
                 ActionChip(
-                  label: Text('局域网 (192.168.10.12)'),
+                  label: Text('HTTPS'),
+                  onPressed: () {
+                    _serverUrlController.text = 'https://agrisalecl.drflo.org';
+                  },
+                  avatar: Icon(Icons.lock, size: 18),
+                  backgroundColor: Colors.green[100],
+                ),
+                ActionChip(
+                  label: Text('局域网'),
                   onPressed: () {
                     _serverUrlController.text = 'http://192.168.10.12:8000';
                   },
                   avatar: Icon(Icons.home, size: 18),
                 ),
                 ActionChip(
-                  label: Text('本地 (localhost)'),
+                  label: Text('本地'),
                   onPressed: () {
                     _serverUrlController.text = 'http://localhost:8000';
                   },

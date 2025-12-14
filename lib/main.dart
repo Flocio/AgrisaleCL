@@ -62,10 +62,8 @@ Future<void> _initializeApiService() async {
     ApiService().setBaseUrl(serverUrl);
     print('API 服务已初始化，服务器地址: $serverUrl');
   } else {
-    // 默认服务器地址（开发环境）
-    // 生产环境应该从配置文件或环境变量读取
-    // 如果树莓派 IP 是固定的，可以在这里修改默认地址
-    const defaultServerUrl = 'http://192.168.10.12:8000'; // 树莓派 IP 地址
+    // 默认服务器地址（使用 HTTPS 内网穿透地址，同时支持内网和外网访问）
+    const defaultServerUrl = 'https://agrisalecl.drflo.org';
     ApiService().setBaseUrl(defaultServerUrl);
     print('API 服务已初始化，使用默认服务器地址: $defaultServerUrl');
   }

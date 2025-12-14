@@ -15,7 +15,7 @@ class ApiService {
   ApiService._internal();
 
   /// 服务器基础 URL（从环境变量或配置读取）
-  String baseUrl = 'http://192.168.10.12:8000'; // 默认值，树莓派 IP 地址
+  String baseUrl = 'https://agrisalecl.drflo.org'; // 默认值，HTTPS 内网穿透地址（同时支持内网和外网）
 
   /// 请求超时时间（秒）
   /// 登录请求使用较短超时，避免用户等待过久
