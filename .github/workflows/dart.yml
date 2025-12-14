@@ -200,12 +200,42 @@ jobs:
           echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > android/app/agrisale-release.jks
           chmod 600 android/app/agrisale-release.jks
 
+      - name: Verify keystore and alias
+        run: |
+          echo "=== 验证恢复的 keystore ==="
+          if [ ! -f "android/app/agrisale-release.jks" ]; then
+            echo "❌ Keystore 文件不存在"
+            exit 1
+          fi
+          echo "✅ Keystore 文件存在"
+          echo ""
+          echo "=== 检查 keystore 中的 alias ==="
+          keytool -list -keystore android/app/agrisale-release.jks -storepass "${{ secrets.ANDROID_STORE_PASSWORD }}" 2>&1 | grep -E "agrisale|Alias name" || echo "❌ 无法列出 alias（可能是密码错误）"
+          echo ""
+          echo "=== 配置的 alias (来自 Secret) ==="
+          echo "ANDROID_KEY_ALIAS=${{ secrets.ANDROID_KEY_ALIAS }}"
+          echo ""
+          echo "=== 验证 alias 是否匹配 ==="
+          KEYSTORE_ALIAS=$(keytool -list -keystore android/app/agrisale-release.jks -storepass "${{ secrets.ANDROID_STORE_PASSWORD }}" 2>&1 | grep -oP "agrisale\w*" | head -1)
+          SECRET_ALIAS="${{ secrets.ANDROID_KEY_ALIAS }}"
+          if [ "$KEYSTORE_ALIAS" = "$SECRET_ALIAS" ]; then
+            echo "✅ Alias 匹配: $KEYSTORE_ALIAS"
+          else
+            echo "❌ Alias 不匹配！"
+            echo "   Keystore 中的 alias: $KEYSTORE_ALIAS"
+            echo "   Secret 中的 alias: $SECRET_ALIAS"
+            exit 1
+          fi
+
       - name: Create key.properties
         run: |
           echo "storePassword=${{ secrets.ANDROID_STORE_PASSWORD }}" > android/key.properties
           echo "keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}" >> android/key.properties
           echo "keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}" >> android/key.properties
           echo "storeFile=agrisale-release.jks" >> android/key.properties
+          echo ""
+          echo "=== 生成的 key.properties 内容 ==="
+          cat android/key.properties
 
       - name: Build Android APK
         run: flutter build apk --release
