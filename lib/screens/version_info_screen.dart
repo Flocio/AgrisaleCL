@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../services/update_service.dart';
 import 'update_dialog.dart';
 
@@ -125,6 +126,7 @@ class _VersionInfoScreenState extends State<VersionInfoScreen> {
                       ),
                     ),
                   ),
+                  
                   SizedBox(height: 20),
                   
                   // 检查更新按钮
@@ -153,6 +155,7 @@ class _VersionInfoScreenState extends State<VersionInfoScreen> {
                       ),
                     ),
                   ),
+                  
                   
                   // 检查错误提示
                   if (_checkError != null) ...[
@@ -207,35 +210,50 @@ class _VersionInfoScreenState extends State<VersionInfoScreen> {
                                     ),
                                   ),
                                 ),
+                                IconButton(
+                                  onPressed: () async {
+                                    final url = 'https://github.com/Flocio/AgrisaleCL/releases/latest';
+                                    try {
+                                      final uri = Uri.parse(url);
+                                      if (await canLaunchUrl(uri)) {
+                                        await launchUrl(uri, mode: LaunchMode.externalApplication);
+                                      } else {
+                                        if (mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(
+                                              content: Text('无法打开链接，请手动访问: $url'),
+                                              backgroundColor: Colors.orange,
+                                              duration: Duration(seconds: 3),
+                                            ),
+                                          );
+                                        }
+                                      }
+                                    } catch (e) {
+                                      if (mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text('打开链接失败: $e'),
+                                            backgroundColor: Colors.red,
+                                            duration: Duration(seconds: 3),
+                                          ),
+                                        );
+                                      }
+                                    }
+                                  },
+                                  icon: Icon(Icons.open_in_new, size: 18),
+                                  tooltip: 'Github',
+                                  padding: EdgeInsets.all(4),
+                                  constraints: BoxConstraints(),
+                                  style: IconButton.styleFrom(
+                                    foregroundColor: Colors.blue[700],
+                                    minimumSize: Size(32, 32),
+                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  ),
+                                ),
                               ],
                             ),
-                            SizedBox(height: 16),
-                            Container(
-                              padding: EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    '当前版本: ${_updateInfo!.currentVersion}',
-                                    style: TextStyle(fontSize: 14),
-                                  ),
-                                  SizedBox(height: 8),
-                                  Text(
-                                    '最新版本: ${_updateInfo!.version}',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.blue[900],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
                             if (_updateInfo!.releaseNotes.isNotEmpty) ...[
+                              SizedBox(height: 16),
                               SizedBox(height: 16),
                               Text(
                                 '更新内容：',
@@ -284,44 +302,35 @@ class _VersionInfoScreenState extends State<VersionInfoScreen> {
                   
                   SizedBox(height: 20),
                   
-                  // 关于系统信息
+                  // 系统信息卡片
                   Card(
                     elevation: 2,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Padding(
-                      padding: EdgeInsets.all(16),
+                      padding: EdgeInsets.all(16.0),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            '关于系统',
+                            '系统信息',
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
-                              color: Colors.grey[700],
                             ),
                           ),
                           Divider(),
                           ListTile(
                             leading: Icon(Icons.info_outline, color: Colors.blue),
                             title: Text('系统信息'),
-                            subtitle: FutureBuilder<PackageInfo>(
-                              future: PackageInfo.fromPlatform(),
-                              builder: (context, snapshot) {
-                                if (snapshot.hasData) {
-                                  return Text('AgrisaleCL v${snapshot.data!.version}');
-                                }
-                                return Text('AgrisaleCL v1.1.0'); // 后备显示
-                              },
-                            ),
+                            subtitle: Text('AgrisaleCL v${_packageInfo!.version}'),
                             trailing: Icon(Icons.arrow_forward_ios, size: 16),
                             onTap: () {
                               showAboutDialog(
                                 context: context,
                                 applicationName: 'AgrisaleCL',
-                                applicationVersion: _packageInfo != null ? 'v${_packageInfo!.version}' : 'v1.1.0',
+                                applicationVersion: 'v${_packageInfo!.version}',
                                 applicationIcon: Image.asset(
                                   'assets/images/background.png',
                                   width: 50,
@@ -368,4 +377,3 @@ class _VersionInfoScreenState extends State<VersionInfoScreen> {
     );
   }
 }
-
