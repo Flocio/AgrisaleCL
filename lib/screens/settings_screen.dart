@@ -676,6 +676,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     
     if (confirm == true) {
       try {
+        // 退出账号前，如果开启了“退出时自动备份”，先备份一次
+        await AutoBackupService().backupOnExitIfNeeded();
+
         // 先发送一次心跳，确保设备ID已同步到服务器
         // 然后停止心跳服务（必须在清除 Token 之前，因为需要 Token 来调用服务器接口）
         final userStatusService = UserStatusService();

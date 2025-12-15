@@ -34,6 +34,7 @@ import 'screens/version_info_screen.dart';
 import 'screens/model_settings_screen.dart';
 import 'services/api_service.dart';
 import 'services/auth_service.dart';
+import 'services/auto_backup_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -85,7 +86,41 @@ Future<void> _initializeApiService() async {
   }
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
+  @override
+  _MyAppState createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
+  bool _didBackupOnExitThisSession = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    // 当应用进入后台或被关闭时，尝试执行一次“退出时自动备份”（如果开启）
+    if ((state == AppLifecycleState.paused || state == AppLifecycleState.detached) &&
+        !_didBackupOnExitThisSession) {
+      _didBackupOnExitThisSession = true;
+      AutoBackupService().backupOnExitIfNeeded();
+    }
+    // 当应用重新回到前台时，重置本次会话的备份标记
+    if (state == AppLifecycleState.resumed) {
+      _didBackupOnExitThisSession = false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(

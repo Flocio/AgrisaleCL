@@ -36,30 +36,120 @@ class AutoBackupService {
   Timer? _autoBackupTimer;
   bool _isBackupRunning = false;
   DateTime? _nextBackupTime; // 记录下次备份时间
+  Duration? _interval; // 当前备份间隔
+
+  /// 将下次备份时间持久化到本地（模拟本地版的 user_settings.auto_backup_next_time）
+  Future<void> _saveNextBackupTime(DateTime? time) async {
+    _nextBackupTime = time;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (time == null) {
+        await prefs.remove('auto_backup_next_time');
+      } else {
+        await prefs.setString('auto_backup_next_time', time.toIso8601String());
+      }
+    } catch (e) {
+      // 持久化失败不影响备份逻辑
+      print('保存下次自动备份时间失败（不影响备份）: $e');
+    }
+  }
+
+  /// 从本地恢复下次备份时间（模拟本地版的 user_settings.auto_backup_next_time）
+  Future<DateTime?> _loadNextBackupTime() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final nextTimeStr = prefs.getString('auto_backup_next_time');
+      if (nextTimeStr == null || nextTimeStr.isEmpty) {
+        return null;
+      }
+      return DateTime.tryParse(nextTimeStr);
+    } catch (e) {
+      print('加载下次自动备份时间失败（不影响备份）: $e');
+      return null;
+    }
+  }
 
   // 启动自动备份
   Future<void> startAutoBackup(int intervalMinutes) async {
     await stopAutoBackup(); // 先停止现有的定时器
-    
-    final interval = Duration(minutes: intervalMinutes);
+
+    _interval = Duration(minutes: intervalMinutes);
     print('启动自动备份服务，间隔: $intervalMinutes 分钟');
-    
-    // 设置下次备份时间
-    _nextBackupTime = DateTime.now().add(interval);
-    
-    _autoBackupTimer = Timer.periodic(interval, (timer) async {
-      await performAutoBackup();
-      // 每次备份后更新下次备份时间
-      _nextBackupTime = DateTime.now().add(interval);
-    });
+
+    final prefs = await SharedPreferences.getInstance();
+    final now = DateTime.now();
+    final lastBackupTimeStr = prefs.getString('last_backup_time');
+
+    // 优先尝试从已记录的下一次备份时间恢复（对应本地版的 auto_backup_next_time）
+    final storedNextTime = await _loadNextBackupTime();
+    if (storedNextTime != null && storedNextTime.isAfter(now)) {
+      _nextBackupTime = storedNextTime;
+      _scheduleNextTimer();
+      return;
+    }
+
+    if (lastBackupTimeStr != null) {
+      try {
+        final lastBackupTime = DateTime.parse(lastBackupTimeStr);
+        final candidateNext = lastBackupTime.add(_interval!);
+        if (candidateNext.isAfter(now)) {
+          // 上次备份时间 + 间隔 仍在未来，按原计划时间继续
+          await _saveNextBackupTime(candidateNext);
+        } else {
+          // 在应用关闭期间已经错过了计划备份，启动后尽快执行一次（例如 10 秒后）
+          await _saveNextBackupTime(now.add(const Duration(seconds: 10)));
+        }
+      } catch (_) {
+        // 解析失败时退回为从现在开始计算
+        await _saveNextBackupTime(now.add(_interval!));
+      }
+    } else {
+      // 从未备份过，从现在开始计算
+      await _saveNextBackupTime(now.add(_interval!));
+    }
+
+    _scheduleNextTimer();
+  }
+
+  /// 使用新的间隔重新启动自动备份调度（从当前时间开始，不使用上次记录的下次备份时间）
+  Future<void> restartWithNewInterval(int intervalMinutes) async {
+    await stopAutoBackup();
+
+    _interval = Duration(minutes: intervalMinutes);
+    print('使用新间隔重新启动自动备份服务，间隔: $intervalMinutes 分钟');
+
+    final now = DateTime.now();
+    await _saveNextBackupTime(now.add(_interval!));
+    _scheduleNextTimer();
   }
 
   // 停止自动备份
   Future<void> stopAutoBackup() async {
     _autoBackupTimer?.cancel();
     _autoBackupTimer = null;
-    _nextBackupTime = null; // 清除下次备份时间
+    _nextBackupTime = null; // 清除内存中的下次备份时间（本地存储可保留，用于下次恢复）
+    _interval = null;
     print('停止自动备份服务');
+  }
+
+  // 安排下一次备份的定时器（单次定时，执行后再安排下一次）
+  void _scheduleNextTimer() {
+    if (_nextBackupTime == null || _interval == null) {
+      return;
+    }
+
+    final now = DateTime.now();
+    var delay = _nextBackupTime!.difference(now);
+    if (delay.inSeconds <= 0) {
+      delay = const Duration(seconds: 1);
+    }
+
+    _autoBackupTimer = Timer(delay, () async {
+      await performAutoBackup();
+      // 每次备份后更新下次备份时间
+      await _saveNextBackupTime(DateTime.now().add(_interval!));
+      _scheduleNextTimer();
+    });
   }
   
   // 获取距离下一次备份的剩余时间（秒）
@@ -93,6 +183,60 @@ class AutoBackupService {
       return '$minutes 分钟 $secs 秒';
     } else {
       return '$secs 秒';
+    }
+  }
+
+  /// 如果开启了"退出时自动备份"，在退出账号或应用进入后台前调用一次
+  Future<void> backupOnExitIfNeeded() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final backupOnExit = prefs.getBool('auto_backup_on_exit') ?? false;
+      final username = prefs.getString('current_username');
+
+      if (!backupOnExit || username == null || username.isEmpty) {
+        return;
+      }
+
+      // 标记退出时备份正在进行（用于检测异常退出后未完成的备份）
+      await prefs.setBool('exit_backup_in_progress', true);
+
+      final success = await performAutoBackup();
+      print('退出前自动备份结果: $success');
+
+      // 备份完成后清除标记
+      await prefs.setBool('exit_backup_in_progress', false);
+    } catch (e) {
+      // 退出前自动备份失败不影响退出或关闭应用
+      print('退出前自动备份失败（不影响退出）: $e');
+      // 尝试清除标记（可能会失败，因为应用可能正在被杀掉）
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool('exit_backup_in_progress', false);
+      } catch (_) {}
+    }
+  }
+
+  /// 检查上次退出时的备份是否未完成，如果是，执行一次补充备份
+  /// 应该在启动时自动备份之前调用
+  Future<void> checkAndRecoverExitBackup() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final exitBackupInProgress = prefs.getBool('exit_backup_in_progress') ?? false;
+      final backupOnExit = prefs.getBool('auto_backup_on_exit') ?? false;
+
+      if (exitBackupInProgress && backupOnExit) {
+        print('检测到上次退出时的备份未完成，正在补充执行...');
+        // 清除标记
+        await prefs.setBool('exit_backup_in_progress', false);
+        // 执行补充备份
+        final success = await performAutoBackup();
+        print('补充退出时备份结果: $success');
+      } else if (exitBackupInProgress) {
+        // 标记存在但退出备份未开启，只清除标记
+        await prefs.setBool('exit_backup_in_progress', false);
+      }
+    } catch (e) {
+      print('检查退出时备份状态失败: $e');
     }
   }
 
@@ -374,4 +518,3 @@ class AutoBackupService {
     }
   }
 }
-

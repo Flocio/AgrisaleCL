@@ -44,8 +44,13 @@ class _SalesIncomeAnalysisScreenState extends State<SalesIncomeAnalysisScreen> {
   @override
   void initState() {
     super.initState();
-    _fetchCustomers();
-    _fetchAnalysisData();
+    _loadInitialData();
+  }
+
+  /// 首次加载时先拉取客户列表，再加载分析数据，避免客户名称缺失显示为“未指定客户”
+  Future<void> _loadInitialData() async {
+    await _fetchCustomers();
+    await _fetchAnalysisData();
   }
 
   Future<void> _fetchCustomers() async {

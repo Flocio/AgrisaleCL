@@ -74,7 +74,27 @@ class _LoginScreenState extends State<LoginScreen> {
       final prefs = await SharedPreferences.getInstance();
       final autoBackupEnabled = prefs.getBool('auto_backup_enabled') ?? false;
       final autoBackupInterval = prefs.getInt('auto_backup_interval') ?? 15;
-      
+      final backupOnLaunch = prefs.getBool('auto_backup_on_launch') ?? false;
+
+      // 1. 首先检查并恢复上次退出时未完成的备份
+      // （当应用被强制关闭时，退出时的备份可能未完成）
+      await AutoBackupService().checkAndRecoverExitBackup();
+
+      // 2. 启动应用/自动登录/登录成功时，如果配置了"启动时自动备份"，先备份一次
+      if (backupOnLaunch) {
+        try {
+          final success = await AutoBackupService().performAutoBackup();
+          if (success) {
+            print('应用启动时自动备份成功');
+          } else {
+            print('应用启动时自动备份失败');
+          }
+        } catch (e) {
+          print('应用启动时自动备份异常: $e');
+        }
+      }
+
+      // 3. 定时自动备份根据开关与间隔启动
       if (autoBackupEnabled) {
         await AutoBackupService().startAutoBackup(autoBackupInterval);
         print('自动备份服务已启动，间隔: $autoBackupInterval 分钟');

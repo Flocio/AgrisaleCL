@@ -41,8 +41,13 @@ class _PurchaseRemittanceAnalysisScreenState extends State<PurchaseRemittanceAna
   @override
   void initState() {
     super.initState();
-    _fetchSuppliers();
-    _fetchAnalysisData();
+    _loadInitialData();
+  }
+
+  /// 首次加载时先获取供应商列表，再加载分析数据，避免供应商名称缺失显示为“未指定供应商”
+  Future<void> _loadInitialData() async {
+    await _fetchSuppliers();
+    await _fetchAnalysisData();
   }
 
   Future<void> _fetchSuppliers() async {
