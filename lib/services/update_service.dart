@@ -188,32 +188,32 @@ class UpdateService {
       String fileName;
       
       if (platform == 'ios') {
-        fileName = 'agrisalecl-ios-';
-      } else if (platform == 'macos') {
-        fileName = 'agrisalecl-macos-';
-      } else if (platform == 'windows') {
-        fileName = 'agrisalecl-windows-';
-      } else {
-        return null;
-      }
-      
-      for (var asset in assets) {
-        final assetName = asset['name'] as String;
-        if (assetName.startsWith(fileName)) {
+      fileName = 'agrisalecl-ios-';
+    } else if (platform == 'macos') {
+      fileName = 'agrisalecl-macos-';
+    } else if (platform == 'windows') {
+      fileName = 'agrisalecl-windows-';
+    } else {
+      return null;
+    }
+    
+    for (var asset in assets) {
+      final assetName = asset['name'] as String;
+      if (assetName.startsWith(fileName)) {
           // 清理URL中的空格和特殊字符
           final originalUrl = (asset['browser_download_url'] as String).trim().replaceAll(' ', '');
-          
-          // 如果使用代理，添加代理前缀
-          if (proxyBase != null) {
-            final proxiedUrl = '$proxyBase/$originalUrl';
-            return proxiedUrl;
-          } else {
-            return originalUrl;
-          }
+        
+        // 如果使用代理，添加代理前缀
+        if (proxyBase != null) {
+          final proxiedUrl = '$proxyBase/$originalUrl';
+          return proxiedUrl;
+        } else {
+          return originalUrl;
         }
       }
-      
-      return null;
+    }
+    
+    return null;
     }
   }
   
@@ -615,7 +615,7 @@ class UpdateService {
         // 注意：installApk 只是启动安装流程，不等待安装完成
         // 它不会返回安装是否成功，也不会抛出异常（即使安装失败）
         // 用户必须在系统安装界面中完成所有步骤
-        await InstallPlugin.installApk(apkPath);
+      await InstallPlugin.installApk(apkPath);
       } catch (installError) {
         rethrow;
       }

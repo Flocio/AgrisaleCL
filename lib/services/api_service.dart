@@ -17,15 +17,26 @@ class ApiService {
   /// 服务器基础 URL（从环境变量或配置读取）
   String baseUrl = 'https://agrisalecl.drflo.org'; // 默认值，HTTPS 内网穿透地址（同时支持内网和外网）
 
+  /// 持久化 HTTP 客户端（连接复用，提高性能）
+  http.Client? _httpClient;
+
+  /// 获取或创建 HTTP 客户端
+  http.Client get _client {
+    _httpClient ??= http.Client();
+    return _httpClient!;
+  }
+
   /// 请求超时时间（秒）
-  /// 登录请求使用较短超时，避免用户等待过久
-  static const int timeoutSeconds = 15;
+  /// 针对 Cloudflare Tunnel 优化：增加超时时间以应对网络延迟
+  static const int timeoutSeconds = 20;
 
   /// 最大重试次数
-  static const int maxRetries = 3;
+  /// 针对 Cloudflare Tunnel 优化：减少重试次数，避免累积延迟
+  static const int maxRetries = 2;
 
   /// 重试延迟（毫秒）
-  static const int retryDelayMs = 1000;
+  /// 针对 Cloudflare Tunnel 优化：减少重试延迟
+  static const int retryDelayMs = 500;
 
   /// Token 存储键
   static const String _tokenKey = 'api_token';
@@ -69,6 +80,8 @@ class ApiService {
     final headers = <String, String>{
       'Content-Type': 'application/json',
       'Accept': 'application/json',
+      'Accept-Encoding': 'gzip, deflate', // 支持响应压缩
+      'Connection': 'keep-alive', // 保持连接复用
     };
 
     if (includeAuth) {
@@ -196,10 +209,10 @@ class ApiService {
         uri = uri.replace(queryParameters: queryParameters);
       }
 
-      // 执行请求
+      // 执行请求（使用持久化客户端）
       final response = await _executeRequest(() async {
         final headers = await _buildHeaders(includeAuth: includeAuth);
-        return await http.get(uri, headers: headers);
+        return await _client.get(uri, headers: headers);
       });
 
       return await _handleResponse<T>(response, fromJsonT);
@@ -220,11 +233,11 @@ class ApiService {
     try {
       final uri = Uri.parse('$baseUrl$path');
 
-      // 执行请求
+      // 执行请求（使用持久化客户端）
       final response = await _executeRequest(() async {
         final headers = await _buildHeaders(includeAuth: includeAuth);
         final bodyJson = body != null ? jsonEncode(body) : null;
-        return await http.post(uri, headers: headers, body: bodyJson);
+        return await _client.post(uri, headers: headers, body: bodyJson);
       });
 
       return await _handleResponse<T>(response, fromJsonT);
@@ -245,11 +258,11 @@ class ApiService {
     try {
       final uri = Uri.parse('$baseUrl$path');
 
-      // 执行请求
+      // 执行请求（使用持久化客户端）
       final response = await _executeRequest(() async {
         final headers = await _buildHeaders(includeAuth: includeAuth);
         final bodyJson = body != null ? jsonEncode(body) : null;
-        return await http.put(uri, headers: headers, body: bodyJson);
+        return await _client.put(uri, headers: headers, body: bodyJson);
       });
 
       return await _handleResponse<T>(response, fromJsonT);
@@ -269,10 +282,10 @@ class ApiService {
     try {
       final uri = Uri.parse('$baseUrl$path');
 
-      // 执行请求
+      // 执行请求（使用持久化客户端）
       final response = await _executeRequest(() async {
         final headers = await _buildHeaders(includeAuth: includeAuth);
-        return await http.delete(uri, headers: headers);
+        return await _client.delete(uri, headers: headers);
       });
 
       return await _handleResponse<T>(response, fromJsonT);
@@ -293,11 +306,11 @@ class ApiService {
     try {
       final uri = Uri.parse('$baseUrl$path');
 
-      // 执行请求
+      // 执行请求（使用持久化客户端）
       final response = await _executeRequest(() async {
         final headers = await _buildHeaders(includeAuth: includeAuth);
         final bodyJson = body != null ? jsonEncode(body) : null;
-        return await http.patch(uri, headers: headers, body: bodyJson);
+        return await _client.patch(uri, headers: headers, body: bodyJson);
       });
 
       return await _handleResponse<T>(response, fromJsonT);
@@ -306,6 +319,12 @@ class ApiService {
     } catch (e) {
       throw ApiError.unknown('PATCH 请求失败', e);
     }
+  }
+
+  /// 关闭 HTTP 客户端（清理资源）
+  void close() {
+    _httpClient?.close();
+    _httpClient = null;
   }
 }
 

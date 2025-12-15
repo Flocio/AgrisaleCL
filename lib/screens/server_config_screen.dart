@@ -19,11 +19,30 @@ class _ServerConfigScreenState extends State<ServerConfigScreen> {
   bool _isTesting = false;
   String? _testResult;
   String? _currentServerUrl;
+  String? _selectedQuickConfig; // 当前选中的快速配置选项
 
   @override
   void initState() {
     super.initState();
     _loadCurrentServerUrl();
+    // 监听输入框变化，实时更新快速配置选中状态
+    _serverUrlController.addListener(() {
+      final currentText = _serverUrlController.text.trim();
+      String? newSelected;
+      if (currentText == 'https://agrisalecl.drflo.org') {
+        newSelected = 'https';
+      } else if (currentText == 'http://192.168.10.12:8000') {
+        newSelected = 'lan';
+      } else {
+        newSelected = null;
+      }
+      // 只在状态改变时更新，避免不必要的重建
+      if (_selectedQuickConfig != newSelected) {
+        setState(() {
+          _selectedQuickConfig = newSelected;
+        });
+      }
+    });
   }
 
   @override
@@ -38,10 +57,25 @@ class _ServerConfigScreenState extends State<ServerConfigScreen> {
     final serverUrl = prefs.getString('server_url');
     // 默认使用 HTTPS 地址（内网穿透），同时支持内网和外网访问
     final defaultUrl = 'https://agrisalecl.drflo.org';
+    final currentUrl = serverUrl ?? defaultUrl;
     setState(() {
-      _currentServerUrl = serverUrl ?? defaultUrl;
-      _serverUrlController.text = _currentServerUrl ?? defaultUrl;
+      _currentServerUrl = currentUrl;
+      _serverUrlController.text = currentUrl;
+      // 根据当前地址设置选中的快速配置
+      _updateSelectedQuickConfig(currentUrl);
     });
+  }
+  
+  // 更新选中的快速配置选项
+  void _updateSelectedQuickConfig(String url) {
+    final trimmedUrl = url.trim();
+    if (trimmedUrl == 'https://agrisalecl.drflo.org') {
+      _selectedQuickConfig = 'https';
+    } else if (trimmedUrl == 'http://192.168.10.12:8000') {
+      _selectedQuickConfig = 'lan';
+    } else {
+      _selectedQuickConfig = null;
+    }
   }
 
   // 测试服务器连接
@@ -71,7 +105,7 @@ class _ServerConfigScreenState extends State<ServerConfigScreen> {
         try {
           final json = jsonDecode(response.body) as Map<String, dynamic>;
           final status = json['status'] as String?;
-          
+      
           if (status == 'healthy') {
             setState(() {
               _testResult = '连接成功！服务器运行正常';
@@ -148,7 +182,6 @@ class _ServerConfigScreenState extends State<ServerConfigScreen> {
             backgroundColor: Colors.green,
           ),
         );
-        Navigator.of(context).pop();
       }
     } catch (e) {
       if (mounted) {
@@ -332,12 +365,12 @@ class _ServerConfigScreenState extends State<ServerConfigScreen> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                          ),
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
                         ),
                         SizedBox(width: 12),
                         Text('测试中...', style: TextStyle(fontSize: 16)),
@@ -403,12 +436,12 @@ class _ServerConfigScreenState extends State<ServerConfigScreen> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                          ),
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
                         ),
                         SizedBox(width: 12),
                         Text('保存中...', style: TextStyle(fontSize: 16)),
@@ -436,24 +469,28 @@ class _ServerConfigScreenState extends State<ServerConfigScreen> {
                 ActionChip(
                   label: Text('HTTPS'),
                   onPressed: () {
-                    _serverUrlController.text = 'https://agrisalecl.drflo.org';
+                    setState(() {
+                      _serverUrlController.text = 'https://agrisalecl.drflo.org';
+                      _selectedQuickConfig = 'https';
+                    });
                   },
                   avatar: Icon(Icons.lock, size: 18),
-                  backgroundColor: Colors.green[100],
+                  backgroundColor: _selectedQuickConfig == 'https' 
+                      ? Colors.green[100] 
+                      : null,
                 ),
                 ActionChip(
                   label: Text('局域网'),
                   onPressed: () {
+                    setState(() {
                     _serverUrlController.text = 'http://192.168.10.12:8000';
+                      _selectedQuickConfig = 'lan';
+                    });
                   },
                   avatar: Icon(Icons.home, size: 18),
-                ),
-                ActionChip(
-                  label: Text('本地'),
-                  onPressed: () {
-                    _serverUrlController.text = 'http://localhost:8000';
-                  },
-                  avatar: Icon(Icons.computer, size: 18),
+                  backgroundColor: _selectedQuickConfig == 'lan' 
+                      ? Colors.green[100] 
+                      : null,
                 ),
               ],
             ),

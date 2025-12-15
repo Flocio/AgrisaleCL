@@ -224,7 +224,7 @@ class _VersionInfoScreenState extends State<VersionInfoScreen> {
                                               content: Text('无法打开链接，请手动访问: $url'),
                                               backgroundColor: Colors.orange,
                                               duration: Duration(seconds: 3),
-                                            ),
+                              ),
                                           );
                                         }
                                       }
@@ -235,7 +235,7 @@ class _VersionInfoScreenState extends State<VersionInfoScreen> {
                                             content: Text('打开链接失败: $e'),
                                             backgroundColor: Colors.red,
                                             duration: Duration(seconds: 3),
-                                          ),
+                                  ),
                                         );
                                       }
                                     }
@@ -248,9 +248,9 @@ class _VersionInfoScreenState extends State<VersionInfoScreen> {
                                     foregroundColor: Colors.blue[700],
                                     minimumSize: Size(32, 32),
                                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ],
                             ),
                             if (_updateInfo!.releaseNotes.isNotEmpty) ...[
                               SizedBox(height: 16),

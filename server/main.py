@@ -8,6 +8,8 @@ import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
+from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.middleware.cors import CORSMiddleware
 
 from server.database import init_database, get_pool
 from server.constants import APP_VERSION
@@ -101,6 +103,18 @@ app = FastAPI(
 
 # 设置中间件
 setup_middleware(app)
+
+# 添加响应压缩中间件（提高 Cloudflare Tunnel 传输效率）
+app.add_middleware(GZipMiddleware, minimum_size=1000)  # 只压缩大于 1KB 的响应
+
+# 添加 CORS 中间件（如果需要）
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # 生产环境应该限制具体域名
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # 注册路由
 app.include_router(auth.router)

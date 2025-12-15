@@ -339,6 +339,13 @@ async def cors_middleware(request: Request, call_next):
     response.headers["Access-Control-Allow-Credentials"] = "true"
     response.headers["Access-Control-Max-Age"] = "3600"
     
+    # 添加性能优化响应头
+    # 对于 GET 请求，添加缓存控制（可根据需要调整）
+    if request.method == "GET":
+        # 对于 API 数据，使用较短的缓存时间（5分钟），避免数据不一致
+        response.headers["Cache-Control"] = "private, max-age=300"
+        response.headers["Vary"] = "Accept-Encoding"
+    
     return response
 
 
