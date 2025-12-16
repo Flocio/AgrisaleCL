@@ -326,5 +326,83 @@ class ApiService {
     _httpClient?.close();
     _httpClient = null;
   }
+
+  /// 尝试多个服务器地址执行操作
+  /// 
+  /// [operation] 需要执行的操作（接受当前 baseUrl 作为参数）
+  /// [preferredUrl] 优先尝试的地址（如果为 null，则从 SharedPreferences 读取）
+  /// 
+  /// 返回操作结果，如果所有地址都失败则抛出最后一个异常
+  Future<T> tryMultipleUrls<T>({
+    required Future<T> Function(String currentUrl) operation,
+    String? preferredUrl,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    
+    // 构建地址列表（按优先级排序）
+    final List<String> urlsToTry = [];
+    
+    // 1. 优先使用传入的 preferredUrl 或从 SharedPreferences 读取的地址
+    final configuredUrl = preferredUrl ?? prefs.getString('server_url');
+    if (configuredUrl != null && configuredUrl.isNotEmpty) {
+      urlsToTry.add(configuredUrl);
+    }
+    
+    // 2. HTTPS 地址（内网穿透）
+    const httpsUrl = 'https://agrisalecl.drflo.org';
+    if (!urlsToTry.contains(httpsUrl)) {
+      urlsToTry.add(httpsUrl);
+    }
+    
+    // 3. 局域网地址
+    const lanUrl = 'http://192.168.10.12:8000';
+    if (!urlsToTry.contains(lanUrl)) {
+      urlsToTry.add(lanUrl);
+    }
+    
+    Exception? lastException;
+    String? lastFailedUrl;
+    
+    // 尝试每个地址
+    for (final url in urlsToTry) {
+      try {
+        print('尝试服务器地址: $url');
+        
+        // 临时设置 baseUrl
+        final originalUrl = baseUrl;
+        setBaseUrl(url);
+        
+        try {
+          // 执行操作
+          final result = await operation(url);
+          
+          // 如果成功，保存这个地址到 SharedPreferences 并更新 baseUrl
+          await prefs.setString('server_url', url);
+          setBaseUrl(url); // 确保使用成功的地址
+          print('操作成功，已保存并切换到服务器地址: $url');
+          
+          return result;
+        } catch (e) {
+          // 操作失败，恢复原始地址以便尝试下一个地址
+          baseUrl = originalUrl;
+          rethrow;
+        }
+      } catch (e) {
+        lastException = e is Exception ? e : Exception(e.toString());
+        lastFailedUrl = url;
+        print('服务器地址 $url 失败: $e');
+        
+        // 继续尝试下一个地址
+        continue;
+      }
+    }
+    
+    // 所有地址都失败
+    print('所有服务器地址都失败，最后失败的地址: $lastFailedUrl');
+    if (lastException != null) {
+      throw lastException;
+    }
+    throw Exception('无法连接到任何服务器地址');
+  }
 }
 

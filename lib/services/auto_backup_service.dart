@@ -72,10 +72,10 @@ class AutoBackupService {
   // 启动自动备份
   Future<void> startAutoBackup(int intervalMinutes) async {
     await stopAutoBackup(); // 先停止现有的定时器
-
+    
     _interval = Duration(minutes: intervalMinutes);
     print('启动自动备份服务，间隔: $intervalMinutes 分钟');
-
+    
     final prefs = await SharedPreferences.getInstance();
     final now = DateTime.now();
     final lastBackupTimeStr = prefs.getString('last_backup_time');

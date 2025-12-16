@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
+import 'package:url_launcher/url_launcher.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -224,6 +225,36 @@ class _ServerConfigScreenState extends State<ServerConfigScreen> {
     return null;
   }
 
+  // 打开文档链接
+  Future<void> _openDocLink(String path) async {
+    try {
+      final baseUrl = _serverUrlController.text.trim();
+      if (baseUrl.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('请先输入服务器地址')),
+        );
+        return;
+      }
+      
+      // 确保 baseUrl 不以 / 结尾
+      final cleanBaseUrl = baseUrl.endsWith('/') ? baseUrl.substring(0, baseUrl.length - 1) : baseUrl;
+      final docUrl = '$cleanBaseUrl$path';
+      
+      final uri = Uri.parse(docUrl);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('无法打开链接：$docUrl')),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('打开链接失败：${e.toString()}')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -275,7 +306,12 @@ class _ServerConfigScreenState extends State<ServerConfigScreen> {
                     ),
                     SizedBox(height: 6),
                     Text(
-                      '• 修改后需要重新登录才能生效',
+                      '• 智能连接：登录时会自动尝试多个地址（配置地址 → HTTPS → 局域网），直到找到可用的地址',
+                      style: TextStyle(fontSize: 13, color: Colors.blue[800]),
+                    ),
+                    SizedBox(height: 6),
+                    Text(
+                      '• 自动保存：成功连接的地址会自动保存，下次优先使用',
                       style: TextStyle(fontSize: 13, color: Colors.blue[800]),
                     ),
                   ],
@@ -493,6 +529,118 @@ class _ServerConfigScreenState extends State<ServerConfigScreen> {
                       : null,
                 ),
               ],
+            ),
+            
+            SizedBox(height: 24),
+            
+            // 服务器文档链接卡片
+            Card(
+              elevation: 2,
+              child: Padding(
+                padding: EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.description, color: Colors.blue[700]),
+                        SizedBox(width: 8),
+                        Text(
+                          '服务器文档',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blue[900],
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 12),
+                    Text(
+                      '根据当前服务器地址访问 API 文档：',
+                      style: TextStyle(fontSize: 13, color: Colors.grey[700]),
+                    ),
+                    SizedBox(height: 12),
+                    // Swagger UI 文档链接
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(Icons.api, color: Colors.blue),
+                      title: Text('Swagger UI', style: TextStyle(fontSize: 14)),
+                      subtitle: Text(
+                        _serverUrlController.text.trim().isEmpty 
+                            ? '请先输入服务器地址'
+                            : '${_serverUrlController.text.trim()}/docs',
+                        style: TextStyle(fontSize: 12, color: Colors.grey[700], fontFamily: 'monospace'),
+                      ),
+                      trailing: Icon(Icons.open_in_new, size: 18, color: Colors.blue),
+                      onTap: () => _openDocLink('/docs'),
+                    ),
+                    Divider(height: 1),
+                    // ReDoc 文档链接
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(Icons.article, color: Colors.orange),
+                      title: Text('ReDoc', style: TextStyle(fontSize: 14)),
+                      subtitle: Text(
+                        _serverUrlController.text.trim().isEmpty 
+                            ? '请先输入服务器地址'
+                            : '${_serverUrlController.text.trim()}/redoc',
+                        style: TextStyle(fontSize: 12, color: Colors.grey[700], fontFamily: 'monospace'),
+                      ),
+                      trailing: Icon(Icons.open_in_new, size: 18, color: Colors.orange),
+                      onTap: () => _openDocLink('/redoc'),
+                    ),
+                    Divider(height: 1),
+                    // OpenAPI JSON 链接
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(Icons.code, color: Colors.green),
+                      title: Text('OpenAPI JSON', style: TextStyle(fontSize: 14)),
+                      subtitle: Text(
+                        _serverUrlController.text.trim().isEmpty 
+                            ? '请先输入服务器地址'
+                            : '${_serverUrlController.text.trim()}/openapi.json',
+                        style: TextStyle(fontSize: 12, color: Colors.grey[700], fontFamily: 'monospace'),
+                      ),
+                      trailing: Icon(Icons.open_in_new, size: 18, color: Colors.green),
+                      onTap: () => _openDocLink('/openapi.json'),
+                    ),
+                    SizedBox(height: 8),
+                    Container(
+                      padding: EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.blue[50],
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.info_outline, size: 16, color: Colors.blue[700]),
+                              SizedBox(width: 8),
+                              Text(
+                                '文档说明',
+                                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blue[800]),
+                              ),
+                            ],
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            '• Swagger UI：交互式文档，可直接测试 API 接口\n• ReDoc：美观的文档界面，适合阅读和分享\n• OpenAPI JSON：机器可读的 API 规范，用于代码生成',
+                            style: TextStyle(fontSize: 11, color: Colors.blue[800]),
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            '文档链接基于当前输入的服务器地址生成',
+                            style: TextStyle(fontSize: 10, color: Colors.blue[700], fontStyle: FontStyle.italic),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ],
         ),

@@ -58,10 +58,11 @@ Future<void> _initializeApiService() async {
   final prefs = await SharedPreferences.getInstance();
   
   // 从 SharedPreferences 读取服务器地址（如果已配置）
+  // 注意：这里只是设置初始地址，实际登录时会尝试多个地址
   final serverUrl = prefs.getString('server_url');
   if (serverUrl != null && serverUrl.isNotEmpty) {
     ApiService().setBaseUrl(serverUrl);
-    print('API 服务已初始化，服务器地址: $serverUrl');
+    print('API 服务已初始化，优先使用配置的服务器地址: $serverUrl');
   } else {
     // 默认服务器地址（使用 HTTPS 内网穿透地址，同时支持内网和外网访问）
     const defaultServerUrl = 'https://agrisalecl.drflo.org';
@@ -72,12 +73,19 @@ Future<void> _initializeApiService() async {
   // 初始化认证服务（AuthService 是单例，无需显式初始化）
   
   // 尝试自动登录（如果有保存的 Token）
+  // autoLogin 方法内部会自动尝试多个服务器地址（配置地址 → HTTPS → 局域网）
   final token = await ApiService().getToken();
   if (token != null) {
-    print('检测到已保存的 Token，尝试自动登录...');
+    print('检测到已保存的 Token，尝试自动登录（将尝试多个服务器地址）...');
     try {
-      await AuthService().autoLogin();
-      print('自动登录成功');
+      final userInfo = await AuthService().autoLogin();
+      if (userInfo != null) {
+        print('自动登录成功，用户: ${userInfo.username}');
+      } else {
+        print('自动登录失败：Token 无效或所有服务器地址都不可用');
+        // 清除无效的 Token
+        await ApiService().clearToken();
+      }
     } catch (e) {
       print('自动登录失败: $e');
       // 清除无效的 Token

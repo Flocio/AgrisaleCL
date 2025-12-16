@@ -338,16 +338,16 @@ class _AutoBackupScreenState extends State<AutoBackupScreen> {
                                   ),
                                   child: Column(
                                     children: [
-                                      ListTile(
-                                        leading: Icon(Icons.schedule, color: Colors.blue),
-                                        title: Text('上次备份'),
-                                        subtitle: Text(_formatLastBackupTime()),
-                                      ),
+                                ListTile(
+                                  leading: Icon(Icons.schedule, color: Colors.blue),
+                                  title: Text('上次备份'),
+                                  subtitle: Text(_formatLastBackupTime()),
+                                ),
                                       Divider(height: 0),
-                                      ListTile(
-                                        leading: Icon(Icons.timer, color: Colors.orange),
-                                        title: Text('下次备份'),
-                                        subtitle: Text(_countdown),
+                                ListTile(
+                                  leading: Icon(Icons.timer, color: Colors.orange),
+                                  title: Text('下次备份'),
+                                  subtitle: Text(_countdown),
                                       ),
                                       Divider(height: 0),
                                       ListTile(

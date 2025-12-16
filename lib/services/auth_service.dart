@@ -109,32 +109,43 @@ class AuthService {
   /// [password] 密码
   /// 
   /// 返回 [LoginResponse] 包含用户信息和 Token
+  /// 
+  /// 注册过程中会自动尝试多个服务器地址（配置地址 → HTTPS → 局域网），
+  /// 直到找到可用的地址
   Future<LoginResponse> register(String username, String password) async {
     try {
-      final response = await _apiService.post<Map<String, dynamic>>(
-        '/api/auth/register',
-        body: {
-          'username': username,
-          'password': password,
+      // 使用多地址回退机制
+      final loginResponse = await _apiService.tryMultipleUrls<LoginResponse>(
+        operation: (currentUrl) async {
+          print('尝试注册，当前服务器地址: $currentUrl');
+          
+          final response = await _apiService.post<Map<String, dynamic>>(
+            '/api/auth/register',
+            body: {
+              'username': username,
+              'password': password,
+            },
+            fromJsonT: (json) => json as Map<String, dynamic>,
+            includeAuth: false, // 注册不需要认证
+          );
+
+          if (response.isSuccess && response.data != null) {
+            return LoginResponse.fromJson(response.data!);
+          } else {
+            throw ApiError(
+              message: response.message,
+              errorCode: response.errorCode,
+            );
+          }
         },
-        fromJsonT: (json) => json as Map<String, dynamic>,
-        includeAuth: false, // 注册不需要认证
       );
+      
+      // 注册成功，保存 Token 和用户名
+      // 注意：tryMultipleUrls 已经保存了成功的服务器地址并更新了 baseUrl
+      await _apiService.setToken(loginResponse.token);
+      await _saveUsername(loginResponse.user.username);
 
-      if (response.isSuccess && response.data != null) {
-        final loginResponse = LoginResponse.fromJson(response.data!);
-        
-        // 保存 Token 和用户名
-        await _apiService.setToken(loginResponse.token);
-        await _saveUsername(loginResponse.user.username);
-
-        return loginResponse;
-      } else {
-        throw ApiError(
-          message: response.message,
-          errorCode: response.errorCode,
-        );
-      }
+      return loginResponse;
     } on ApiError {
       rethrow;
     } catch (e) {
@@ -148,32 +159,43 @@ class AuthService {
   /// [password] 密码
   /// 
   /// 返回 [LoginResponse] 包含用户信息和 Token
+  /// 
+  /// 登录过程中会自动尝试多个服务器地址（配置地址 → HTTPS → 局域网），
+  /// 直到找到可用的地址
   Future<LoginResponse> login(String username, String password) async {
     try {
-      final response = await _apiService.post<Map<String, dynamic>>(
-        '/api/auth/login',
-        body: {
-          'username': username,
-          'password': password,
+      // 使用多地址回退机制
+      final loginResponse = await _apiService.tryMultipleUrls<LoginResponse>(
+        operation: (currentUrl) async {
+          print('尝试登录，当前服务器地址: $currentUrl');
+          
+          final response = await _apiService.post<Map<String, dynamic>>(
+            '/api/auth/login',
+            body: {
+              'username': username,
+              'password': password,
+            },
+            fromJsonT: (json) => json as Map<String, dynamic>,
+            includeAuth: false, // 登录不需要认证
+          );
+
+          if (response.isSuccess && response.data != null) {
+            return LoginResponse.fromJson(response.data!);
+          } else {
+            throw ApiError(
+              message: response.message,
+              errorCode: response.errorCode,
+            );
+          }
         },
-        fromJsonT: (json) => json as Map<String, dynamic>,
-        includeAuth: false, // 登录不需要认证
       );
+      
+      // 登录成功，保存 Token 和用户名
+      // 注意：tryMultipleUrls 已经保存了成功的服务器地址并更新了 baseUrl
+      await _apiService.setToken(loginResponse.token);
+      await _saveUsername(loginResponse.user.username);
 
-      if (response.isSuccess && response.data != null) {
-        final loginResponse = LoginResponse.fromJson(response.data!);
-        
-        // 保存 Token 和用户名
-        await _apiService.setToken(loginResponse.token);
-        await _saveUsername(loginResponse.user.username);
-
-        return loginResponse;
-      } else {
-        throw ApiError(
-          message: response.message,
-          errorCode: response.errorCode,
-        );
-      }
+      return loginResponse;
     } on ApiError {
       rethrow;
     } catch (e) {
@@ -296,6 +318,9 @@ class AuthService {
   /// 自动登录（使用保存的用户名和 Token）
   /// 
   /// 如果 Token 有效，返回用户信息；否则返回 null
+  /// 
+  /// 自动登录过程中会自动尝试多个服务器地址（配置地址 → HTTPS → 局域网），
+  /// 直到找到可用的地址
   Future<UserInfo?> autoLogin() async {
     try {
       // 检查是否有 Token
@@ -303,10 +328,18 @@ class AuthService {
         return null;
       }
 
-      // 尝试获取用户信息（验证 Token 是否有效）
-      return await getCurrentUser();
+      // 使用多地址回退机制尝试获取用户信息（验证 Token 是否有效）
+      // 注意：tryMultipleUrls 已经保存了成功的服务器地址并更新了 baseUrl
+      final userInfo = await _apiService.tryMultipleUrls<UserInfo>(
+        operation: (currentUrl) async {
+          print('尝试自动登录，当前服务器地址: $currentUrl');
+          return await getCurrentUser();
+        },
+      );
+      
+      return userInfo;
     } catch (e) {
-      // Token 无效，清除本地数据
+      // Token 无效或所有地址都失败，清除本地数据
       if (e is ApiError && e.isUnauthorized) {
         await _apiService.clearToken();
         await _clearUsername();
