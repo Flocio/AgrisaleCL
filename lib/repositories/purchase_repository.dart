@@ -106,6 +106,7 @@ class PurchaseCreate {
       'productName': productName,
       'quantity': quantity,
       if (purchaseDate != null) 'purchaseDate': purchaseDate,
+      // 如果 supplierId 为 0，也发送 0（服务器端会将其转换为 NULL）
       if (supplierId != null) 'supplierId': supplierId,
       if (totalPurchasePrice != null) 'totalPurchasePrice': totalPurchasePrice,
       if (note != null) 'note': note,

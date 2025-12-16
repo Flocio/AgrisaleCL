@@ -5,6 +5,8 @@ import '../widgets/footer_widget.dart';
 import '../repositories/product_repository.dart';
 import '../repositories/supplier_repository.dart';
 import '../models/api_error.dart';
+import '../models/api_response.dart';
+import '../utils/snackbar_helper.dart';
 
 class ProductScreen extends StatefulWidget {
   @override
@@ -86,48 +88,44 @@ class _ProductScreenState extends State<ProductScreen> {
     });
   }
 
-  Future<void> _fetchProducts() async {
+  Future<void> _fetchProducts({bool isRefresh = false}) async {
+    if (!isRefresh) {
     setState(() {
       _isLoading = true;
     });
+    }
     
     try {
-      // 获取所有产品（不分页，用于列表显示）
-      final productsResponse = await _productRepo.getProducts(page: 1, pageSize: 1000);
-      final products = productsResponse.items;
+      // 并行获取所有数据
+      final results = await Future.wait([
+        _productRepo.getProducts(page: 1, pageSize: 1000),
+        _supplierRepo.getAllSuppliers(),
+      ]);
       
-      // 获取所有供应商（不分页）
-      final suppliers = await _supplierRepo.getAllSuppliers();
+      final productsResponse = results[0] as PaginatedResponse<Product>;
+      final suppliers = results[1] as List<Supplier>;
       
         setState(() {
-          _products = products;
+          _products = productsResponse.items;
         _suppliers = suppliers;
-        _filterProducts();
         _isLoading = false;
       });
+        
+        // 重新应用过滤条件（初始加载和刷新都需要）
+        _filterProducts();
     } on ApiError catch (e) {
       setState(() {
         _isLoading = false;
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('获取产品列表失败: ${e.message}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        context.showErrorSnackBar('获取产品列表失败: ${e.message}');
       }
     } catch (e) {
       setState(() {
         _isLoading = false;
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('获取产品列表失败: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        context.showErrorSnackBar('获取产品列表失败: ${e.toString()}');
       }
     }
   }
@@ -153,30 +151,15 @@ class _ProductScreenState extends State<ProductScreen> {
         _fetchProducts();
         
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('产品添加成功'),
-              backgroundColor: Colors.green,
-            ),
-          );
+          context.showSuccessSnackBar('产品添加成功');
         }
       } on ApiError catch (e) {
         if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-              content: Text(e.message),
-              backgroundColor: Colors.red,
-              ),
-            );
+          context.showErrorSnackBar(e.message);
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('添加产品失败: ${e.toString()}'),
-              backgroundColor: Colors.red,
-            ),
-          );
+          context.showErrorSnackBar('添加产品失败: ${e.toString()}');
         }
       }
     }
@@ -204,12 +187,7 @@ class _ProductScreenState extends State<ProductScreen> {
         _fetchProducts();
         
         if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-              content: Text('产品更新成功'),
-              backgroundColor: Colors.green,
-              ),
-            );
+            context.showSuccessSnackBar('产品更新成功');
         }
       } on ApiError catch (e) {
         if (mounted) {
@@ -218,21 +196,11 @@ class _ProductScreenState extends State<ProductScreen> {
             errorMessage = '产品已被其他操作修改，请刷新后重试';
             _fetchProducts(); // 刷新数据
           }
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(errorMessage),
-              backgroundColor: Colors.red,
-            ),
-          );
+          context.showErrorSnackBar(errorMessage);
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('更新产品失败: ${e.toString()}'),
-              backgroundColor: Colors.red,
-            ),
-          );
+          context.showErrorSnackBar('更新产品失败: ${e.toString()}');
         }
       }
     }
@@ -276,30 +244,15 @@ class _ProductScreenState extends State<ProductScreen> {
         _fetchProducts();
         
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('产品删除成功'),
-              backgroundColor: Colors.green,
-            ),
-          );
+          context.showSuccessSnackBar('产品删除成功');
         }
       } on ApiError catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(e.message),
-              backgroundColor: Colors.red,
-            ),
-          );
+          context.showErrorSnackBar(e.message);
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('删除产品失败: ${e.toString()}'),
-              backgroundColor: Colors.red,
-            ),
-          );
+          context.showErrorSnackBar('删除产品失败: ${e.toString()}');
         }
       }
     }
@@ -410,11 +363,16 @@ class _ProductScreenState extends State<ProductScreen> {
             ),
             Divider(height: 1, thickness: 1, indent: 16, endIndent: 16),
           Expanded(
-              child: _isLoading
+              child: _isLoading && _products.isEmpty
                   ? Center(child: CircularProgressIndicator())
-                  : _filteredProducts.isEmpty
-                  ? Center(
-                      child: SingleChildScrollView(
+                  : RefreshIndicator(
+                      onRefresh: () => _fetchProducts(isRefresh: true),
+                      child: _filteredProducts.isEmpty
+                          ? SingleChildScrollView(
+                              physics: AlwaysScrollableScrollPhysics(),
+                              child: Container(
+                                height: MediaQuery.of(context).size.height * 0.7,
+                                child: Center(
                         child: Padding(
                           padding: EdgeInsets.all(16),
                           child: Column(
@@ -441,6 +399,7 @@ class _ProductScreenState extends State<ProductScreen> {
                                 textAlign: TextAlign.center,
                               ),
                             ],
+                                    ),
                           ),
                         ),
                       ),
@@ -563,6 +522,7 @@ class _ProductScreenState extends State<ProductScreen> {
                   ),
                 );
               },
+            ),
             ),
           ),
             // 添加搜索栏和浮动按钮的容器

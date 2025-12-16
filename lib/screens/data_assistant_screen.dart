@@ -20,6 +20,7 @@ import '../repositories/settings_repository.dart';
 import '../services/auth_service.dart';
 import '../models/api_error.dart';
 import '../models/api_response.dart';
+import '../utils/snackbar_helper.dart';
 
 class DataAssistantScreen extends StatefulWidget {
   @override
@@ -140,23 +141,11 @@ class _DataAssistantScreenState extends State<DataAssistantScreen> {
         _addSystemMessage("欢迎使用数据分析助手！您可以询问关于系统中的产品、销售、采购、库存等数据的问题。");
         
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('对话记录已清空'),
-              duration: Duration(seconds: 2),
-              backgroundColor: Colors.green,
-            ),
-          );
+          context.showSuccessSnackBar('对话记录已清空');
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('清空失败: $e'),
-              duration: Duration(seconds: 2),
-              backgroundColor: Colors.red,
-            ),
-          );
+          context.showErrorSnackBar('清空失败: $e');
         }
       }
     }
@@ -235,13 +224,7 @@ class _DataAssistantScreenState extends State<DataAssistantScreen> {
   Future<void> _copyToClipboard(String text) async {
     await Clipboard.setData(ClipboardData(text: text));
     if (mounted) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('文本已复制到剪贴板'),
-        duration: Duration(seconds: 2),
-        backgroundColor: Colors.green,
-      ),
-    );
+    context.showSuccessSnackBar('文本已复制到剪贴板');
     }
   }
 

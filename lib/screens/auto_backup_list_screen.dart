@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/auto_backup_service.dart';
 import '../services/auth_service.dart';
 import '../widgets/footer_widget.dart';
+import '../utils/snackbar_helper.dart';
 
 class AutoBackupListScreen extends StatefulWidget {
   @override
@@ -34,9 +35,7 @@ class _AutoBackupListScreenState extends State<AutoBackupListScreen> {
       setState(() {
         _isLoading = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('加载备份列表失败: $e')),
-      );
+      context.showSnackBar('加载备份列表失败: $e');
     }
   }
 
@@ -63,23 +62,17 @@ class _AutoBackupListScreenState extends State<AutoBackupListScreen> {
     if (confirm == true) {
       final success = await _backupService.deleteBackup(backup['path']);
       if (success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('删除成功')),
-        );
+        context.showSnackBar('删除成功');
         _loadBackupList();
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('删除失败')),
-        );
+        context.showSnackBar('删除失败');
       }
     }
   }
 
   Future<void> _deleteAllBackups() async {
     if (_backupList.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('没有备份可删除')),
-      );
+      context.showSnackBar('没有备份可删除');
       return;
     }
 
@@ -120,9 +113,7 @@ class _AutoBackupListScreenState extends State<AutoBackupListScreen> {
       final deletedCount = await _backupService.deleteAllBackups();
       Navigator.of(context).pop(); // 关闭加载对话框
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('已删除 $deletedCount 个备份')),
-      );
+      context.showSnackBar('已删除 $deletedCount 个备份');
       _loadBackupList();
     }
   }
@@ -202,9 +193,7 @@ class _AutoBackupListScreenState extends State<AutoBackupListScreen> {
         
         if (userInfo == null) {
           Navigator.of(context).pop();
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('未登录')),
-          );
+          context.showSnackBar('未登录');
           return;
         }
 
@@ -230,15 +219,11 @@ class _AutoBackupListScreenState extends State<AutoBackupListScreen> {
             ),
           );
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('恢复失败')),
-          );
+          context.showSnackBar('恢复失败');
         }
       } catch (e) {
         Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('恢复失败: $e')),
-        );
+        context.showSnackBar('恢复失败: $e');
       }
     }
   }

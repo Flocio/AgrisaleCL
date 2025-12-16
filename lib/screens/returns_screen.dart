@@ -7,6 +7,8 @@ import '../repositories/return_repository.dart';
 import '../repositories/product_repository.dart';
 import '../repositories/customer_repository.dart';
 import '../models/api_error.dart';
+import '../models/api_response.dart';
+import '../utils/snackbar_helper.dart';
 
 class ReturnsScreen extends StatefulWidget {
   @override
@@ -171,53 +173,50 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
     });
   }
 
-  Future<void> _fetchData() async {
+  Future<void> _fetchData({bool isRefresh = false}) async {
+    if (!isRefresh) {
     setState(() {
       _isLoading = true;
     });
+    }
     
     try {
-      // 获取所有产品（不分页）
-      final productsResponse = await _productRepo.getProducts(page: 1, pageSize: 1000);
-      final products = productsResponse.items;
+      // 并行获取所有数据
+      final results = await Future.wait([
+        _productRepo.getProducts(page: 1, pageSize: 1000),
+        _customerRepo.getAllCustomers(),
+        _returnRepo.getReturns(page: 1, pageSize: 1000),
+      ]);
       
-      // 获取所有客户（不分页）
-      final customers = await _customerRepo.getAllCustomers();
-      
-      // 获取所有退货记录（不分页，用于列表显示）
-      final returnsResponse = await _returnRepo.getReturns(page: 1, pageSize: 1000);
-      final returns = returnsResponse.items;
+      final productsResponse = results[0] as PaginatedResponse<Product>;
+      final customers = results[1] as List<Customer>;
+      final returnsResponse = results[2] as PaginatedResponse<Return>;
       
       setState(() {
-        _products = products;
+        _products = productsResponse.items;
         _customers = customers;
-        _returns = returns;
-        _filteredReturns = returns;
+        _returns = returnsResponse.items;
+        _filteredReturns = returnsResponse.items;
         _isLoading = false;
       });
+      
+      // 刷新后重新应用过滤条件
+      if (isRefresh) {
+        _filterReturns();
+      }
     } on ApiError catch (e) {
       setState(() {
         _isLoading = false;
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('获取数据失败: ${e.message}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        context.showErrorSnackBar('获取数据失败: ${e.message}');
       }
     } catch (e) {
       setState(() {
         _isLoading = false;
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('获取数据失败: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        context.showErrorSnackBar('获取数据失败: ${e.toString()}');
       }
     }
   }
@@ -242,12 +241,7 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
         _fetchData();
         
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('退货记录添加成功'),
-              backgroundColor: Colors.green,
-            ),
-          );
+          context.showSuccessSnackBar('退货记录添加成功');
         }
       } on ApiError catch (e) {
         if (mounted) {
@@ -286,12 +280,7 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
         _fetchData();
         
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('退货记录更新成功'),
-              backgroundColor: Colors.green,
-            ),
-          );
+          context.showSuccessSnackBar('退货记录更新成功');
         }
       } on ApiError catch (e) {
         if (mounted) {
@@ -346,21 +335,11 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
                     _fetchData();
                   } on ApiError catch (e) {
                     if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('更新备注失败: ${e.message}'),
-                          backgroundColor: Colors.red,
-                        ),
-                      );
+                      context.showErrorSnackBar('更新备注失败: ${e.message}');
                     }
                   } catch (e) {
                     if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('更新备注失败: ${e.toString()}'),
-                          backgroundColor: Colors.red,
-                        ),
-                      );
+                      context.showErrorSnackBar('更新备注失败: ${e.toString()}');
                     }
                   }
                 },
@@ -432,12 +411,7 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
         _fetchData();
         
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('退货记录删除成功'),
-              backgroundColor: Colors.green,
-            ),
-          );
+          context.showSuccessSnackBar('退货记录删除成功');
         }
       } on ApiError catch (e) {
         if (mounted) {
@@ -709,11 +683,16 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
       body: Column(
         children: <Widget>[
           Expanded(
-            child: _isLoading
+            child: _isLoading && _returns.isEmpty
                 ? Center(child: CircularProgressIndicator())
-                : _filteredReturns.isEmpty
-                    ? Center(
-                        child: SingleChildScrollView(
+                : RefreshIndicator(
+                    onRefresh: () => _fetchData(isRefresh: true),
+                    child: _filteredReturns.isEmpty
+                        ? SingleChildScrollView(
+                            physics: AlwaysScrollableScrollPhysics(),
+                            child: Container(
+                              height: MediaQuery.of(context).size.height * 0.7,
+                              child: Center(
                           child: Padding(
                             padding: EdgeInsets.all(16),
                             child: Column(
@@ -740,6 +719,7 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
                                   textAlign: TextAlign.center,
                                 ),
                               ],
+                                  ),
                             ),
                           ),
                         ),
@@ -899,6 +879,7 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
                         ),
                       );
                     },
+                  ),
                   ),
           ),
           // 添加搜索栏和浮动按钮的容器

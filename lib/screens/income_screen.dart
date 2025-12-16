@@ -7,6 +7,7 @@ import '../repositories/income_repository.dart';
 import '../repositories/customer_repository.dart';
 import '../repositories/employee_repository.dart';
 import '../models/api_error.dart';
+import '../utils/snackbar_helper.dart';
 
 class IncomeScreen extends StatefulWidget {
   @override
@@ -188,10 +189,12 @@ class _IncomeScreenState extends State<IncomeScreen> {
     });
   }
 
-  Future<void> _fetchData() async {
+  Future<void> _fetchData({bool isRefresh = false}) async {
+    if (!isRefresh) {
     setState(() {
       _isLoading = true;
     });
+    }
     
     try {
       await Future.wait([
@@ -203,17 +206,17 @@ class _IncomeScreenState extends State<IncomeScreen> {
       setState(() {
         _isLoading = false;
       });
+      
+      // 刷新后重新应用过滤条件
+      if (isRefresh) {
+        _filterIncomes();
+      }
     } catch (e) {
       setState(() {
         _isLoading = false;
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('获取数据失败: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        context.showErrorSnackBar('获取数据失败: ${e.toString()}');
       }
     }
   }
@@ -282,30 +285,15 @@ class _IncomeScreenState extends State<IncomeScreen> {
         _fetchIncomes();
         
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('进账记录添加成功'),
-              backgroundColor: Colors.green,
-            ),
-          );
+          context.showSuccessSnackBar('进账记录添加成功');
         }
       } on ApiError catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(e.message),
-              backgroundColor: Colors.red,
-            ),
-          );
+          context.showErrorSnackBar(e.message);
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('添加进账记录失败: ${e.toString()}'),
-              backgroundColor: Colors.red,
-            ),
-          );
+          context.showErrorSnackBar('添加进账记录失败: ${e.toString()}');
         }
       }
     }
@@ -340,30 +328,15 @@ class _IncomeScreenState extends State<IncomeScreen> {
         _fetchIncomes();
         
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('进账记录更新成功'),
-              backgroundColor: Colors.green,
-            ),
-          );
+          context.showSuccessSnackBar('进账记录更新成功');
         }
       } on ApiError catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(e.message),
-              backgroundColor: Colors.red,
-            ),
-          );
+          context.showErrorSnackBar(e.message);
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('更新进账记录失败: ${e.toString()}'),
-              backgroundColor: Colors.red,
-            ),
-          );
+          context.showErrorSnackBar('更新进账记录失败: ${e.toString()}');
         }
       }
     }
@@ -402,30 +375,15 @@ class _IncomeScreenState extends State<IncomeScreen> {
         _fetchIncomes();
         
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('进账记录删除成功'),
-              backgroundColor: Colors.green,
-            ),
-          );
+          context.showSuccessSnackBar('进账记录删除成功');
         }
       } on ApiError catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(e.message),
-              backgroundColor: Colors.red,
-            ),
-          );
+          context.showErrorSnackBar(e.message);
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('删除进账记录失败: ${e.toString()}'),
-              backgroundColor: Colors.red,
-            ),
-          );
+          context.showErrorSnackBar('删除进账记录失败: ${e.toString()}');
         }
       }
     }
@@ -724,11 +682,16 @@ class _IncomeScreenState extends State<IncomeScreen> {
           ),
           Divider(height: 1, thickness: 1, indent: 16, endIndent: 16),
           Expanded(
-            child: _isLoading
+            child: _isLoading && _incomes.isEmpty
                 ? Center(child: CircularProgressIndicator())
-                : _filteredIncomes.isEmpty
-                    ? Center(
-                        child: SingleChildScrollView(
+                : RefreshIndicator(
+                    onRefresh: () => _fetchData(isRefresh: true),
+                    child: _filteredIncomes.isEmpty
+                        ? SingleChildScrollView(
+                            physics: AlwaysScrollableScrollPhysics(),
+                            child: Container(
+                              height: MediaQuery.of(context).size.height * 0.7,
+                              child: Center(
                           child: Padding(
                             padding: EdgeInsets.all(16),
                             child: Column(
@@ -755,6 +718,7 @@ class _IncomeScreenState extends State<IncomeScreen> {
                                   textAlign: TextAlign.center,
                                 ),
                               ],
+                                  ),
                             ),
                           ),
                         ),
@@ -916,6 +880,7 @@ class _IncomeScreenState extends State<IncomeScreen> {
                         ),
                       );
                     },
+                  ),
                   ),
           ),
           // 添加搜索栏和浮动按钮的容器

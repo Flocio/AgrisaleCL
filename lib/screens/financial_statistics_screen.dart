@@ -20,6 +20,8 @@ import '../repositories/remittance_repository.dart';
 import '../repositories/product_repository.dart';
 import '../models/api_error.dart';
 import '../models/api_response.dart';
+import '../utils/snackbar_helper.dart';
+import '../services/export_service.dart';
 
 class FinancialStatisticsScreen extends StatefulWidget {
   @override
@@ -49,7 +51,9 @@ class _FinancialStatisticsScreenState extends State<FinancialStatisticsScreen> {
   void initState() {
     super.initState();
     _loadSortPreference();
-    _fetchProducts();
+    setState(() {
+      _isLoading = true;
+    });
     _fetchStatistics();
   }
 
@@ -73,41 +77,34 @@ class _FinancialStatisticsScreenState extends State<FinancialStatisticsScreen> {
         });
     } on ApiError catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('加载产品数据失败: ${e.message}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        context.showErrorSnackBar('加载产品数据失败: ${e.message}');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('加载产品数据失败: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        context.showErrorSnackBar('加载产品数据失败: ${e.toString()}');
       }
     }
   }
 
   Future<void> _fetchStatistics() async {
-    setState(() {
-      _isLoading = true;
-    });
-
     try {
-      // 并行获取所有数据
+      // 并行获取所有数据（包括产品数据）
       final results = await Future.wait([
+        _productRepo.getProducts(page: 1, pageSize: 10000),
         _saleRepo.getSales(page: 1, pageSize: 10000),
         _returnRepo.getReturns(page: 1, pageSize: 10000),
         _purchaseRepo.getPurchases(page: 1, pageSize: 10000),
       ]);
       
-      final salesResponse = results[0] as PaginatedResponse<Sale>;
-      final returnsResponse = results[1] as PaginatedResponse<Return>;
-      final purchasesResponse = results[2] as PaginatedResponse<Purchase>;
+      // 先设置产品数据，确保后续处理可以使用
+      final productsResponse = results[0] as PaginatedResponse<Product>;
+      setState(() {
+        _products = productsResponse.items;
+      });
+      
+      final salesResponse = results[1] as PaginatedResponse<Sale>;
+      final returnsResponse = results[2] as PaginatedResponse<Return>;
+      final purchasesResponse = results[3] as PaginatedResponse<Purchase>;
       
       // 应用产品筛选
       List<Sale> sales = salesResponse.items;
@@ -230,24 +227,14 @@ class _FinancialStatisticsScreenState extends State<FinancialStatisticsScreen> {
         _isLoading = false;
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('加载统计数据失败: ${e.message}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        context.showErrorSnackBar('加载统计数据失败: ${e.message}');
       }
     } catch (e) {
       setState(() {
         _isLoading = false;
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('加载统计数据失败: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        context.showErrorSnackBar('加载统计数据失败: ${e.toString()}');
       }
     }
   }
@@ -299,58 +286,12 @@ class _FinancialStatisticsScreenState extends State<FinancialStatisticsScreen> {
 
     String csv = const ListToCsvConverter().convert(rows);
 
-    if (Platform.isMacOS || Platform.isWindows) {
-      // macOS 和 Windows: 使用 file_picker 让用户选择保存位置
-      String? selectedPath = await FilePicker.platform.saveFile(
-        dialogTitle: '保存财务统计报告',
-        fileName: 'financial_statistics.csv',
-        type: FileType.custom,
-        allowedExtensions: ['csv'],
-      );
-      
-      if (selectedPath != null) {
-        final file = File(selectedPath);
-        await file.writeAsString(csv);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('导出成功: $selectedPath')),
-        );
-      }
-      return;
-    }
-
-    String path;
-    if (Platform.isAndroid) {
-      // 请求存储权限
-      if (await Permission.storage.request().isGranted) {
-        final directory = Directory('/storage/emulated/0/Download');
-        path = '${directory.path}/financial_statistics.csv';
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('存储权限被拒绝')),
-        );
-        return;
-      }
-    } else if (Platform.isIOS) {
-      final directory = await getApplicationDocumentsDirectory();
-      path = '${directory.path}/financial_statistics.csv';
-    } else {
-      // 其他平台使用应用文档目录作为后备方案
-      final directory = await getApplicationDocumentsDirectory();
-      path = '${directory.path}/financial_statistics.csv';
-    }
-
-    final file = File(path);
-    await file.writeAsString(csv);
-
-    if (Platform.isIOS) {
-      // iOS 让用户手动选择存储位置
-      await Share.shareFiles([file.path], text: '财务统计 CSV 文件');
-    } else {
-      // Android 直接存入 Download 目录，并提示用户
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('导出成功: $path')),
-      );
-    }
+    // 使用统一的导出服务
+    await ExportService.showExportOptions(
+      context: context,
+      csvData: csv,
+      baseFileName: '财务统计',
+    );
   }
 
   // 显示日历对话框
@@ -539,9 +480,7 @@ class _FinancialStatisticsScreenState extends State<FinancialStatisticsScreen> {
                     Navigator.of(context).pop();
                     _jumpToDate(selectedDay!);
                   } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('请先选择一个${_currentIndex == 0 ? '日期' : '月份'}')),
-                    );
+                    context.showSnackBar('请先选择一个${_currentIndex == 0 ? '日期' : '月份'}');
                   }
                 },
                 child: Text('跳转'),
@@ -583,13 +522,9 @@ class _FinancialStatisticsScreenState extends State<FinancialStatisticsScreen> {
         );
       });
       
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('已跳转到 $targetDate 的记录')),
-      );
+      context.showSnackBar('已跳转到 $targetDate 的记录');
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('未找到 $targetDate 的记录')),
-      );
+      context.showSnackBar('未找到 $targetDate 的记录');
     }
   }
 
@@ -638,7 +573,7 @@ class _FinancialStatisticsScreenState extends State<FinancialStatisticsScreen> {
               onPressed: _toggleSortOrder,
             ),
             IconButton(
-              icon: Icon(Icons.download),
+              icon: Icon(Icons.share),
               tooltip: '导出 CSV',
               onPressed: _exportToCSV,
             ),
@@ -769,6 +704,10 @@ class _FinancialStatisticsScreenState extends State<FinancialStatisticsScreen> {
   }
 
   Widget _buildStatisticsView(List<Map<String, dynamic>> statistics, String dateKey, String dateLabel) {
+    if (_isLoading && statistics.isEmpty) {
+      return Center(child: CircularProgressIndicator());
+    }
+    
     if (statistics.isEmpty) {
       return Center(
         child: Column(

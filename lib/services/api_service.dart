@@ -327,6 +327,26 @@ class ApiService {
     _httpClient = null;
   }
 
+  /// 快速测试服务器地址是否可达（用于多地址尝试时的预检查）
+  /// 
+  /// [url] 要测试的服务器地址
+  /// [timeoutSeconds] 超时时间（秒），默认 5 秒
+  /// 
+  /// 返回 true 表示可达，false 表示不可达
+  Future<bool> _quickTestUrl(String url, {int timeoutSeconds = 5}) async {
+    try {
+      final uri = Uri.parse('$url/health');
+      final response = await _client
+          .get(uri)
+          .timeout(Duration(seconds: timeoutSeconds));
+      
+      // 只要能返回 200 或 503（数据库未连接但服务器在线）就算可达
+      return response.statusCode == 200 || response.statusCode == 503;
+    } catch (e) {
+      return false;
+    }
+  }
+
   /// 尝试多个服务器地址执行操作
   /// 
   /// [operation] 需要执行的操作（接受当前 baseUrl 作为参数）
@@ -360,13 +380,27 @@ class ApiService {
       urlsToTry.add(lanUrl);
     }
     
+    print('将按顺序尝试以下服务器地址: ${urlsToTry.join(', ')}');
+    
     Exception? lastException;
     String? lastFailedUrl;
     
     // 尝试每个地址
     for (final url in urlsToTry) {
       try {
-        print('尝试服务器地址: $url');
+        print('正在测试服务器地址: $url');
+        
+        // 先快速测试地址是否可达（5秒超时，快速失败）
+        final isReachable = await _quickTestUrl(url, timeoutSeconds: 5);
+        
+        if (!isReachable) {
+          print('服务器地址 $url 不可达，快速跳过');
+          lastException = Exception('服务器地址不可达');
+          lastFailedUrl = url;
+          continue; // 直接尝试下一个地址
+        }
+        
+        print('服务器地址 $url 可达，执行登录操作...');
         
         // 临时设置 baseUrl
         final originalUrl = baseUrl;

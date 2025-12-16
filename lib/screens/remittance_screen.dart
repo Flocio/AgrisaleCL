@@ -8,6 +8,7 @@ import '../repositories/supplier_repository.dart';
 import '../repositories/employee_repository.dart';
 import '../repositories/income_repository.dart'; // 用于 PaymentMethod
 import '../models/api_error.dart';
+import '../utils/snackbar_helper.dart';
 
 class RemittanceScreen extends StatefulWidget {
   @override
@@ -187,10 +188,12 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
     });
   }
 
-  Future<void> _fetchData() async {
+  Future<void> _fetchData({bool isRefresh = false}) async {
+    if (!isRefresh) {
     setState(() {
       _isLoading = true;
     });
+    }
     
     try {
       await Future.wait([
@@ -202,17 +205,17 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
       setState(() {
         _isLoading = false;
       });
+      
+      // 刷新后重新应用过滤条件
+      if (isRefresh) {
+        _filterRemittances();
+      }
     } catch (e) {
       setState(() {
         _isLoading = false;
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('获取数据失败: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        context.showErrorSnackBar('获取数据失败: ${e.toString()}');
       }
     }
   }
@@ -277,30 +280,15 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
           _fetchRemittances();
         
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('汇款记录添加成功'),
-              backgroundColor: Colors.green,
-            ),
-          );
+          context.showSuccessSnackBar('汇款记录添加成功');
         }
       } on ApiError catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(e.message),
-              backgroundColor: Colors.red,
-            ),
-          );
+          context.showErrorSnackBar(e.message);
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('添加汇款记录失败: ${e.toString()}'),
-              backgroundColor: Colors.red,
-            ),
-          );
+          context.showErrorSnackBar('添加汇款记录失败: ${e.toString()}');
         }
       }
     }
@@ -334,30 +322,15 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
           _fetchRemittances();
         
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('汇款记录更新成功'),
-              backgroundColor: Colors.green,
-            ),
-          );
+          context.showSuccessSnackBar('汇款记录更新成功');
         }
       } on ApiError catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(e.message),
-              backgroundColor: Colors.red,
-            ),
-          );
+          context.showErrorSnackBar(e.message);
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('更新汇款记录失败: ${e.toString()}'),
-              backgroundColor: Colors.red,
-            ),
-          );
+          context.showErrorSnackBar('更新汇款记录失败: ${e.toString()}');
         }
       }
     }
@@ -396,30 +369,15 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
           _fetchRemittances();
         
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('汇款记录删除成功'),
-              backgroundColor: Colors.green,
-            ),
-          );
+          context.showSuccessSnackBar('汇款记录删除成功');
         }
       } on ApiError catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(e.message),
-              backgroundColor: Colors.red,
-            ),
-          );
+          context.showErrorSnackBar(e.message);
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('删除汇款记录失败: ${e.toString()}'),
-              backgroundColor: Colors.red,
-            ),
-          );
+          context.showErrorSnackBar('删除汇款记录失败: ${e.toString()}');
         }
       }
     }
@@ -718,11 +676,16 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
           ),
           Divider(height: 1, thickness: 1, indent: 16, endIndent: 16),
           Expanded(
-            child: _isLoading
+            child: _isLoading && _remittances.isEmpty
                 ? Center(child: CircularProgressIndicator())
-                : _filteredRemittances.isEmpty
-                ? Center(
-                    child: SingleChildScrollView(
+                : RefreshIndicator(
+                    onRefresh: () => _fetchData(isRefresh: true),
+                    child: _filteredRemittances.isEmpty
+                        ? SingleChildScrollView(
+                            physics: AlwaysScrollableScrollPhysics(),
+                            child: Container(
+                              height: MediaQuery.of(context).size.height * 0.7,
+                              child: Center(
                       child: Padding(
                         padding: EdgeInsets.all(16),
                         child: Column(
@@ -749,6 +712,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                               textAlign: TextAlign.center,
                             ),
                           ],
+                                  ),
                         ),
                       ),
                     ),
@@ -889,6 +853,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                         ),
                       );
                     },
+                  ),
                   ),
           ),
           // 添加搜索栏和浮动按钮的容器

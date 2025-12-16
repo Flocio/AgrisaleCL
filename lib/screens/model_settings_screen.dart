@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import '../repositories/settings_repository.dart';
 import '../models/api_error.dart';
+import '../utils/snackbar_helper.dart';
 
 class ModelSettingsScreen extends StatefulWidget {
   @override
@@ -59,24 +60,14 @@ class _ModelSettingsScreenState extends State<ModelSettingsScreen> {
         _isLoading = false; // 即使失败也要停止加载状态
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('加载设置失败: ${e.message}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        context.showErrorSnackBar('加载设置失败: ${e.message}');
       }
     } catch (e) {
       setState(() {
         _isLoading = false; // 即使失败也要停止加载状态
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('加载设置失败: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        context.showErrorSnackBar('加载设置失败: ${e.toString()}');
       }
     }
   }
@@ -96,22 +87,12 @@ class _ModelSettingsScreenState extends State<ModelSettingsScreen> {
       return true; // 保存成功
     } on ApiError catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('保存设置失败: ${e.message}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        context.showErrorSnackBar('保存设置失败: ${e.message}');
       }
       return false; // 保存失败
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('保存设置失败: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        context.showErrorSnackBar('保存设置失败: ${e.toString()}');
       }
       return false; // 保存失败
     }
@@ -130,9 +111,7 @@ class _ModelSettingsScreenState extends State<ModelSettingsScreen> {
   Future<void> _manualSaveSettings() async {
     final success = await _saveSettings();
     if (success) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('设置已保存')),
-      );
+      context.showSnackBar('设置已保存');
     }
     // 如果保存失败，重新从服务器加载设置以恢复一致状态
     if (!success) {
@@ -152,9 +131,7 @@ class _ModelSettingsScreenState extends State<ModelSettingsScreen> {
     // 重置后自动保存
     _autoSaveSettings();
     
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('已重置为默认设置')),
-    );
+    context.showSnackBar('已重置为默认设置');
   }
 
   @override

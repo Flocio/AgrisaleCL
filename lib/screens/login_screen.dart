@@ -7,6 +7,7 @@ import '../services/auth_service.dart';
 import '../services/user_status_service.dart';
 import '../services/auto_backup_service.dart';
 import '../models/api_error.dart';
+import '../utils/snackbar_helper.dart';
 
 class LoginScreen extends StatefulWidget {
   @override
@@ -115,9 +116,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _login() async {
     if (_usernameController.text.isEmpty || _passwordController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('请输入用户名和密码')),
-      );
+      context.showSnackBar('请输入用户名和密码');
       return;
     }
 
@@ -146,12 +145,7 @@ class _LoginScreenState extends State<LoginScreen> {
       // 启动自动备份服务
       await _startAutoBackupService();
       
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('登录成功！'),
-          backgroundColor: Colors.green,
-        ),
-      );
+      context.showSuccessSnackBar('登录成功！');
       
       Navigator.pushReplacementNamed(context, '/main');
     } on ApiError catch (e) {
@@ -168,24 +162,12 @@ class _LoginScreenState extends State<LoginScreen> {
         errorMessage = '用户名或密码错误';
       }
       
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(errorMessage),
-          backgroundColor: Colors.red,
-          duration: Duration(seconds: 5), // 延长显示时间
-        ),
-      );
+      context.showErrorSnackBar(errorMessage, duration: Duration(seconds: 5));
     } catch (e, stackTrace) {
       print('登录失败 (未知错误): $e'); // 调试日志
       print('堆栈跟踪: $stackTrace'); // 调试日志
       
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('登录失败: ${e.toString()}\n请检查网络连接和服务器地址'),
-          backgroundColor: Colors.red,
-          duration: Duration(seconds: 5), // 延长显示时间
-        ),
-      );
+      context.showErrorSnackBar('登录失败: ${e.toString()}\n请检查网络连接和服务器地址');
     } finally {
       setState(() {
         _isLoading = false;
@@ -195,23 +177,17 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _register() async {
     if (_usernameController.text.isEmpty || _passwordController.text.isEmpty || _confirmPasswordController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('请填写所有字段')),
-      );
+      context.showSnackBar('请填写所有字段');
       return;
     }
 
     if (_passwordController.text != _confirmPasswordController.text) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('两次输入的密码不一致')),
-      );
+      context.showSnackBar('两次输入的密码不一致');
       return;
     }
 
     if (_passwordController.text.length < 3) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('密码长度至少为3个字符')),
-      );
+      context.showSnackBar('密码长度至少为3个字符');
       return;
     }
 
@@ -236,29 +212,14 @@ class _LoginScreenState extends State<LoginScreen> {
       // 启动自动备份服务（新用户默认未开启，所以这里不会实际启动）
       await _startAutoBackupService();
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('注册成功！'),
-          backgroundColor: Colors.green,
-        ),
-      );
+      context.showSuccessSnackBar('注册成功！');
 
       // 注册成功后自动登录
       Navigator.pushReplacementNamed(context, '/main');
     } on ApiError catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(e.message),
-          backgroundColor: Colors.red,
-        ),
-      );
+      context.showErrorSnackBar(e.message);
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('注册失败: ${e.toString()}'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      context.showErrorSnackBar('注册失败: ${e.toString()}');
     } finally {
       setState(() {
         _isLoading = false;

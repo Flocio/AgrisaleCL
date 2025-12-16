@@ -259,11 +259,13 @@ async def create_purchase(
                         detail=f"库存不足，当前库存: {current_stock}，无法退货 {abs(purchase_data.quantity)}"
                     )
             
-            # 验证供应商是否存在（如果提供了 supplierId）
-            if purchase_data.supplierId is not None:
+            # 验证供应商是否存在（如果提供了有效的 supplierId）
+            # 如果 supplierId 为 0 或 None，表示未分配供应商，允许创建
+            supplier_id = purchase_data.supplierId if purchase_data.supplierId and purchase_data.supplierId != 0 else None
+            if supplier_id is not None:
                 supplier_cursor = conn.execute(
                     "SELECT id FROM suppliers WHERE id = ? AND userId = ?",
-                    (purchase_data.supplierId, user_id)
+                    (supplier_id, user_id)
                 )
                 if supplier_cursor.fetchone() is None:
                     raise HTTPException(
@@ -284,7 +286,7 @@ async def create_purchase(
                         purchase_data.productName,
                         purchase_data.quantity,
                         purchase_data.purchaseDate,
-                        purchase_data.supplierId,
+                        supplier_id,
                         purchase_data.totalPurchasePrice,
                         purchase_data.note
                     )
@@ -467,11 +469,14 @@ async def update_purchase(
                     )
             
             # 验证供应商（如果修改了供应商）
+            # 如果 supplierId 为 0 或 None，表示未分配供应商，允许更新
+            supplier_id = None
             if purchase_data.supplierId is not None:
                 if purchase_data.supplierId != 0:
+                    supplier_id = purchase_data.supplierId
                     supplier_cursor = conn.execute(
                         "SELECT id FROM suppliers WHERE id = ? AND userId = ?",
-                        (purchase_data.supplierId, user_id)
+                        (supplier_id, user_id)
                     )
                     if supplier_cursor.fetchone() is None:
                         raise HTTPException(
@@ -499,7 +504,7 @@ async def update_purchase(
                 
                 if purchase_data.supplierId is not None:
                     update_fields.append("supplierId = ?")
-                    update_values.append(purchase_data.supplierId if purchase_data.supplierId != 0 else None)
+                    update_values.append(supplier_id)
                 
                 if purchase_data.totalPurchasePrice is not None:
                     update_fields.append("totalPurchasePrice = ?")

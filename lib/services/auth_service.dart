@@ -119,24 +119,24 @@ class AuthService {
         operation: (currentUrl) async {
           print('尝试注册，当前服务器地址: $currentUrl');
           
-          final response = await _apiService.post<Map<String, dynamic>>(
-            '/api/auth/register',
-            body: {
-              'username': username,
-              'password': password,
-            },
-            fromJsonT: (json) => json as Map<String, dynamic>,
-            includeAuth: false, // 注册不需要认证
-          );
+      final response = await _apiService.post<Map<String, dynamic>>(
+        '/api/auth/register',
+        body: {
+          'username': username,
+          'password': password,
+        },
+        fromJsonT: (json) => json as Map<String, dynamic>,
+        includeAuth: false, // 注册不需要认证
+      );
 
-          if (response.isSuccess && response.data != null) {
+      if (response.isSuccess && response.data != null) {
             return LoginResponse.fromJson(response.data!);
-          } else {
-            throw ApiError(
-              message: response.message,
-              errorCode: response.errorCode,
-            );
-          }
+      } else {
+        throw ApiError(
+          message: response.message,
+          errorCode: response.errorCode,
+        );
+      }
         },
       );
       
@@ -169,24 +169,24 @@ class AuthService {
         operation: (currentUrl) async {
           print('尝试登录，当前服务器地址: $currentUrl');
           
-          final response = await _apiService.post<Map<String, dynamic>>(
-            '/api/auth/login',
-            body: {
-              'username': username,
-              'password': password,
-            },
-            fromJsonT: (json) => json as Map<String, dynamic>,
-            includeAuth: false, // 登录不需要认证
-          );
+      final response = await _apiService.post<Map<String, dynamic>>(
+        '/api/auth/login',
+        body: {
+          'username': username,
+          'password': password,
+        },
+        fromJsonT: (json) => json as Map<String, dynamic>,
+        includeAuth: false, // 登录不需要认证
+      );
 
-          if (response.isSuccess && response.data != null) {
+      if (response.isSuccess && response.data != null) {
             return LoginResponse.fromJson(response.data!);
-          } else {
-            throw ApiError(
-              message: response.message,
-              errorCode: response.errorCode,
-            );
-          }
+      } else {
+        throw ApiError(
+          message: response.message,
+          errorCode: response.errorCode,
+        );
+      }
         },
       );
       
@@ -333,7 +333,7 @@ class AuthService {
       final userInfo = await _apiService.tryMultipleUrls<UserInfo>(
         operation: (currentUrl) async {
           print('尝试自动登录，当前服务器地址: $currentUrl');
-          return await getCurrentUser();
+      return await getCurrentUser();
         },
       );
       

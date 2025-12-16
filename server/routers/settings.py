@@ -411,8 +411,11 @@ async def import_data(
                 if 'purchases' in data and data['purchases']:
                     for purchase_data in data['purchases']:
                         # 处理 supplierId 映射
+                        # 如果 supplierId 为 0 或 None，表示未分配供应商，设置为 None
                         supplier_id = purchase_data.get('supplierId')
-                        if supplier_id and supplier_id in supplier_id_map:
+                        if supplier_id == 0:
+                            supplier_id = None
+                        elif supplier_id and supplier_id in supplier_id_map:
                             supplier_id = supplier_id_map[supplier_id]
                         elif supplier_id and supplier_id not in supplier_id_map:
                             supplier_id = None

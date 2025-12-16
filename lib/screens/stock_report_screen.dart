@@ -7,6 +7,7 @@ import '../repositories/product_repository.dart';
 import '../repositories/supplier_repository.dart';
 import '../models/api_error.dart';
 import '../models/api_response.dart';
+import '../utils/snackbar_helper.dart';
 
 class StockReportScreen extends StatefulWidget {
   @override
@@ -62,10 +63,12 @@ class _StockReportScreenState extends State<StockReportScreen> {
     return supplier.name;
   }
 
-  Future<void> _fetchData() async {
+  Future<void> _fetchData({bool isRefresh = false}) async {
+    if (!isRefresh) {
     setState(() {
       _isLoading = true;
     });
+    }
     
     try {
       // 并行获取产品和供应商数据
@@ -79,33 +82,30 @@ class _StockReportScreenState extends State<StockReportScreen> {
       
       setState(() {
         _products = productsResponse.items;
-        _filteredProducts = productsResponse.items;
         _suppliers = suppliers;
         _isLoading = false;
       });
+      
+      // 刷新后重新应用过滤条件
+      if (isRefresh) {
+        _filterProducts();
+      } else {
+        // 初始加载时也应用过滤
+        _filterProducts();
+      }
     } on ApiError catch (e) {
       setState(() {
         _isLoading = false;
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('加载数据失败: ${e.message}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        context.showErrorSnackBar('加载数据失败: ${e.message}');
       }
     } catch (e) {
       setState(() {
         _isLoading = false;
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('加载数据失败: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        context.showErrorSnackBar('加载数据失败: ${e.toString()}');
       }
     }
   }
@@ -178,11 +178,16 @@ class _StockReportScreenState extends State<StockReportScreen> {
               ),
             ),
           Expanded(
-              child: _isLoading
+              child: _isLoading && _products.isEmpty
                   ? Center(child: CircularProgressIndicator())
-                  : _filteredProducts.isEmpty
-                      ? Center(
-                          child: SingleChildScrollView(
+                  : RefreshIndicator(
+                      onRefresh: () => _fetchData(isRefresh: true),
+                      child: _filteredProducts.isEmpty
+                          ? SingleChildScrollView(
+                              physics: AlwaysScrollableScrollPhysics(),
+                              child: Container(
+                                height: MediaQuery.of(context).size.height * 0.7,
+                                child: Center(
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               mainAxisSize: MainAxisSize.min,
@@ -205,6 +210,7 @@ class _StockReportScreenState extends State<StockReportScreen> {
                                   ),
                                 ),
                               ],
+                                  ),
                             ),
                           ),
                         )
@@ -375,6 +381,7 @@ class _StockReportScreenState extends State<StockReportScreen> {
                           ),
                 );
               },
+            ),
             ),
           ),
             // 搜索栏移至底部

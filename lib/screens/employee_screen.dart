@@ -5,6 +5,7 @@ import '../widgets/footer_widget.dart';
 import 'employee_records_screen.dart';
 import '../repositories/employee_repository.dart';
 import '../models/api_error.dart';
+import '../utils/snackbar_helper.dart';
 
 class EmployeeScreen extends StatefulWidget {
   @override
@@ -59,42 +60,41 @@ class _EmployeeScreenState extends State<EmployeeScreen> {
     });
   }
 
-  Future<void> _fetchEmployees() async {
+  Future<void> _fetchEmployees({bool isRefresh = false}) async {
+    if (!isRefresh) {
     setState(() {
       _isLoading = true;
     });
+    }
     
     try {
       final employees = await _employeeRepo.getAllEmployees();
       
       setState(() {
         _employees = employees;
-        _filteredEmployees = employees;
         _isLoading = false;
       });
+      
+      // 刷新后重新应用过滤条件
+      if (isRefresh) {
+        _filterEmployees();
+      } else {
+        // 初始加载时也应用过滤
+        _filterEmployees();
+      }
     } on ApiError catch (e) {
       setState(() {
         _isLoading = false;
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('获取员工列表失败: ${e.message}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        context.showErrorSnackBar('获取员工列表失败: ${e.message}');
       }
     } catch (e) {
       setState(() {
         _isLoading = false;
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('获取员工列表失败: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        context.showErrorSnackBar('获取员工列表失败: ${e.toString()}');
       }
     }
   }
@@ -117,30 +117,15 @@ class _EmployeeScreenState extends State<EmployeeScreen> {
         _fetchEmployees();
         
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('员工添加成功'),
-              backgroundColor: Colors.green,
-            ),
-          );
+          context.showSuccessSnackBar('员工添加成功');
         }
       } on ApiError catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(e.message),
-              backgroundColor: Colors.red,
-            ),
-          );
+          context.showErrorSnackBar(e.message);
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('添加员工失败: ${e.toString()}'),
-              backgroundColor: Colors.red,
-            ),
-          );
+          context.showErrorSnackBar('添加员工失败: ${e.toString()}');
         }
       }
     }
@@ -164,30 +149,15 @@ class _EmployeeScreenState extends State<EmployeeScreen> {
         _fetchEmployees();
         
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('员工更新成功'),
-              backgroundColor: Colors.green,
-            ),
-          );
+          context.showSuccessSnackBar('员工更新成功');
         }
       } on ApiError catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(e.message),
-              backgroundColor: Colors.red,
-            ),
-          );
+          context.showErrorSnackBar(e.message);
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('更新员工失败: ${e.toString()}'),
-              backgroundColor: Colors.red,
-            ),
-          );
+          context.showErrorSnackBar('更新员工失败: ${e.toString()}');
         }
       }
     }
@@ -226,30 +196,15 @@ class _EmployeeScreenState extends State<EmployeeScreen> {
         _fetchEmployees();
         
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('员工删除成功'),
-              backgroundColor: Colors.green,
-            ),
-          );
+          context.showSuccessSnackBar('员工删除成功');
         }
       } on ApiError catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(e.message),
-              backgroundColor: Colors.red,
-            ),
-          );
+          context.showErrorSnackBar(e.message);
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('删除员工失败: ${e.toString()}'),
-              backgroundColor: Colors.red,
-            ),
-          );
+          context.showErrorSnackBar('删除员工失败: ${e.toString()}');
         }
       }
     }
@@ -318,11 +273,16 @@ class _EmployeeScreenState extends State<EmployeeScreen> {
             ),
             Divider(height: 1, thickness: 1, indent: 16, endIndent: 16),
             Expanded(
-              child: _isLoading
+              child: _isLoading && _employees.isEmpty
                   ? Center(child: CircularProgressIndicator())
-                  : _filteredEmployees.isEmpty
-                      ? Center(
-                          child: SingleChildScrollView(
+                  : RefreshIndicator(
+                      onRefresh: () => _fetchEmployees(isRefresh: true),
+                      child: _filteredEmployees.isEmpty
+                          ? SingleChildScrollView(
+                              physics: AlwaysScrollableScrollPhysics(),
+                              child: Container(
+                                height: MediaQuery.of(context).size.height * 0.7,
+                                child: Center(
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               mainAxisSize: MainAxisSize.min,
@@ -345,6 +305,7 @@ class _EmployeeScreenState extends State<EmployeeScreen> {
                                   ),
                                 ),
                               ],
+                                  ),
                             ),
                           ),
                         )
@@ -447,6 +408,7 @@ class _EmployeeScreenState extends State<EmployeeScreen> {
                           ),
                         );
                       },
+                    ),
                     ),
             ),
             // 添加搜索栏和浮动按钮的容器

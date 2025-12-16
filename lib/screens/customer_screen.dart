@@ -6,6 +6,8 @@ import 'customer_records_screen.dart';
 import 'customer_transactions_screen.dart';
 import '../repositories/customer_repository.dart';
 import '../models/api_error.dart';
+import '../utils/snackbar_helper.dart';
+import '../utils/snackbar_helper.dart';
 
 class CustomerScreen extends StatefulWidget {
   @override
@@ -60,10 +62,12 @@ class _CustomerScreenState extends State<CustomerScreen> {
     });
   }
 
-  Future<void> _fetchCustomers() async {
+  Future<void> _fetchCustomers({bool isRefresh = false}) async {
+    if (!isRefresh) {
     setState(() {
       _isLoading = true;
     });
+    }
     
     try {
       // 获取所有客户（不分页）
@@ -71,32 +75,29 @@ class _CustomerScreenState extends State<CustomerScreen> {
       
       setState(() {
         _customers = customers;
-        _filteredCustomers = customers;
         _isLoading = false;
       });
+      
+      // 刷新后重新应用过滤条件
+      if (isRefresh) {
+        _filterCustomers();
+      } else {
+        // 初始加载时也应用过滤
+        _filterCustomers();
+      }
     } on ApiError catch (e) {
       setState(() {
         _isLoading = false;
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('获取客户列表失败: ${e.message}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        context.showErrorSnackBar('获取客户列表失败: ${e.message}');
       }
     } catch (e) {
       setState(() {
         _isLoading = false;
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('获取客户列表失败: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        context.showErrorSnackBar('获取客户列表失败: ${e.toString()}');
       }
     }
   }
@@ -119,30 +120,15 @@ class _CustomerScreenState extends State<CustomerScreen> {
         _fetchCustomers();
         
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('客户添加成功'),
-              backgroundColor: Colors.green,
-            ),
-          );
+          context.showSuccessSnackBar('客户添加成功');
         }
       } on ApiError catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(e.message),
-              backgroundColor: Colors.red,
-            ),
-          );
+          context.showErrorSnackBar(e.message);
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('添加客户失败: ${e.toString()}'),
-              backgroundColor: Colors.red,
-            ),
-          );
+          context.showErrorSnackBar('添加客户失败: ${e.toString()}');
         }
       }
     }
@@ -166,30 +152,15 @@ class _CustomerScreenState extends State<CustomerScreen> {
         _fetchCustomers();
         
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('客户更新成功'),
-              backgroundColor: Colors.green,
-            ),
-          );
+          context.showSuccessSnackBar('客户更新成功');
         }
       } on ApiError catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(e.message),
-              backgroundColor: Colors.red,
-            ),
-          );
+          context.showErrorSnackBar(e.message);
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('更新客户失败: ${e.toString()}'),
-              backgroundColor: Colors.red,
-            ),
-          );
+          context.showErrorSnackBar('更新客户失败: ${e.toString()}');
         }
       }
     }
@@ -220,30 +191,15 @@ class _CustomerScreenState extends State<CustomerScreen> {
         _fetchCustomers();
         
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('客户删除成功'),
-              backgroundColor: Colors.green,
-            ),
-          );
+          context.showSuccessSnackBar('客户删除成功');
         }
       } on ApiError catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(e.message),
-              backgroundColor: Colors.red,
-            ),
-          );
+          context.showErrorSnackBar(e.message);
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('删除客户失败: ${e.toString()}'),
-              backgroundColor: Colors.red,
-            ),
-          );
+          context.showErrorSnackBar('删除客户失败: ${e.toString()}');
         }
       }
     }
@@ -321,11 +277,16 @@ class _CustomerScreenState extends State<CustomerScreen> {
             ),
             Divider(height: 1, thickness: 1, indent: 16, endIndent: 16),
           Expanded(
-              child: _isLoading
+              child: _isLoading && _customers.isEmpty
                   ? Center(child: CircularProgressIndicator())
-                  : _filteredCustomers.isEmpty
-                      ? Center(
-                          child: SingleChildScrollView(
+                  : RefreshIndicator(
+                      onRefresh: () => _fetchCustomers(isRefresh: true),
+                      child: _filteredCustomers.isEmpty
+                          ? SingleChildScrollView(
+                              physics: AlwaysScrollableScrollPhysics(),
+                              child: Container(
+                                height: MediaQuery.of(context).size.height * 0.7,
+                                child: Center(
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               mainAxisSize: MainAxisSize.min,
@@ -348,6 +309,7 @@ class _CustomerScreenState extends State<CustomerScreen> {
                                   ),
                                 ),
                               ],
+                                  ),
                             ),
                           ),
                         )
@@ -461,6 +423,7 @@ class _CustomerScreenState extends State<CustomerScreen> {
                   ),
                 );
               },
+            ),
             ),
           ),
             // 添加搜索栏和浮动按钮的容器

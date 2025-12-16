@@ -13,6 +13,8 @@ import '../repositories/supplier_repository.dart';
 import '../repositories/customer_repository.dart';
 import '../models/api_error.dart';
 import '../models/api_response.dart';
+import '../utils/snackbar_helper.dart';
+import '../services/export_service.dart';
 
 class ProductDetailScreen extends StatefulWidget {
   final Map<String, dynamic> product; // 保持 Map 格式以兼容现有调用
@@ -354,24 +356,14 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         _isLoading = false;
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('加载数据失败: ${e.message}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        context.showErrorSnackBar('加载数据失败: ${e.message}');
       }
     } catch (e) {
       setState(() {
         _isLoading = false;
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('加载数据失败: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        context.showErrorSnackBar('加载数据失败: ${e.toString()}');
       }
     }
   }
@@ -452,58 +444,12 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     csvData += '退货总额,-¥${_returnAmount.toStringAsFixed(2)}\n';
     csvData += '净收益,¥${(_saleAmount - _purchaseAmount - _returnAmount).toStringAsFixed(2)}\n';
 
-    if (Platform.isMacOS || Platform.isWindows) {
-      // macOS 和 Windows: 使用 file_picker 让用户选择保存位置
-      String? selectedPath = await FilePicker.platform.saveFile(
-        dialogTitle: '保存产品详情报告',
-        fileName: 'product_${widget.product['name']}_report.csv',
-        type: FileType.custom,
-        allowedExtensions: ['csv'],
-      );
-      
-      if (selectedPath != null) {
-        final file = File(selectedPath);
-        await file.writeAsString(csvData);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('导出成功: $selectedPath')),
-        );
-      }
-      return;
-    }
-
-    String path;
-    if (Platform.isAndroid) {
-      // 请求存储权限
-      if (await Permission.storage.request().isGranted) {
-        final directory = Directory('/storage/emulated/0/Download');
-        path = '${directory.path}/product_${widget.product['name']}_report.csv';
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('存储权限被拒绝')),
-        );
-        return;
-      }
-    } else if (Platform.isIOS) {
-      final directory = await getApplicationDocumentsDirectory();
-      path = '${directory.path}/product_${widget.product['name']}_report.csv';
-    } else {
-      // 其他平台使用应用文档目录作为后备方案
-      final directory = await getApplicationDocumentsDirectory();
-      path = '${directory.path}/product_${widget.product['name']}_report.csv';
-    }
-
-    final file = File(path);
-    await file.writeAsString(csvData);
-
-    if (Platform.isIOS) {
-      // iOS 让用户手动选择存储位置
-      await Share.shareFiles([file.path], text: '${widget.product['name']} 产品报告 CSV 文件');
-    } else {
-      // Android 直接存入 Download 目录，并提示用户
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('导出成功: $path')),
-      );
-    }
+    // 使用统一的导出服务
+    await ExportService.showExportOptions(
+      context: context,
+      csvData: csvData,
+      baseFileName: '${widget.product['name']}_产品详情',
+    );
   }
 
   @override
@@ -529,7 +475,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             onPressed: _toggleSortOrder,
           ),
           IconButton(
-            icon: Icon(Icons.download),
+            icon: Icon(Icons.share),
             tooltip: '导出 CSV',
             onPressed: _exportToCSV,
           ),
@@ -574,7 +520,11 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           
           Divider(height: 1, thickness: 1, indent: 16, endIndent: 16),
           
-          _filteredRecords.isEmpty 
+          _isLoading && _filteredRecords.isEmpty
+            ? Expanded(
+                child: Center(child: CircularProgressIndicator()),
+              )
+            : _filteredRecords.isEmpty 
             ? Expanded(
                 child: Center(
                   child: SingleChildScrollView(

@@ -7,6 +7,8 @@ import '../repositories/purchase_repository.dart';
 import '../repositories/product_repository.dart';
 import '../repositories/supplier_repository.dart';
 import '../models/api_error.dart';
+import '../models/api_response.dart';
+import '../utils/snackbar_helper.dart';
 
 class PurchaseScreen extends StatefulWidget {
   @override
@@ -171,53 +173,50 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
     });
   }
 
-  Future<void> _fetchData() async {
+  Future<void> _fetchData({bool isRefresh = false}) async {
+    if (!isRefresh) {
     setState(() {
       _isLoading = true;
     });
+    }
     
     try {
-      // 获取所有产品（不分页）
-      final productsResponse = await _productRepo.getProducts(page: 1, pageSize: 1000);
-      final products = productsResponse.items;
+      // 并行获取所有数据
+      final results = await Future.wait([
+        _productRepo.getProducts(page: 1, pageSize: 1000),
+        _supplierRepo.getAllSuppliers(),
+        _purchaseRepo.getPurchases(page: 1, pageSize: 1000),
+      ]);
       
-      // 获取所有供应商（不分页）
-      final suppliers = await _supplierRepo.getAllSuppliers();
-      
-      // 获取所有采购记录（不分页，用于列表显示）
-      final purchasesResponse = await _purchaseRepo.getPurchases(page: 1, pageSize: 1000);
-      final purchases = purchasesResponse.items;
+      final productsResponse = results[0] as PaginatedResponse<Product>;
+      final suppliers = results[1] as List<Supplier>;
+      final purchasesResponse = results[2] as PaginatedResponse<Purchase>;
         
         setState(() {
-          _products = products;
+          _products = productsResponse.items;
           _suppliers = suppliers;
-          _purchases = purchases;
-        _filteredPurchases = purchases;
+          _purchases = purchasesResponse.items;
+        _filteredPurchases = purchasesResponse.items;
         _isLoading = false;
         });
+        
+        // 刷新后重新应用过滤条件
+        if (isRefresh) {
+          _filterPurchases();
+        }
     } on ApiError catch (e) {
       setState(() {
         _isLoading = false;
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('获取数据失败: ${e.message}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        context.showErrorSnackBar('获取数据失败: ${e.message}');
       }
     } catch (e) {
       setState(() {
         _isLoading = false;
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('获取数据失败: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        context.showErrorSnackBar('获取数据失败: ${e.toString()}');
       }
     }
   }
@@ -242,12 +241,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
         _fetchData();
       
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('采购记录添加成功'),
-              backgroundColor: Colors.green,
-            ),
-          );
+          context.showSuccessSnackBar('采购记录添加成功');
         }
       } on ApiError catch (e) {
         if (mounted) {
@@ -290,12 +284,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
           _fetchData();
         
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('采购记录更新成功'),
-              backgroundColor: Colors.green,
-            ),
-          );
+          context.showSuccessSnackBar('采购记录更新成功');
     }
       } on ApiError catch (e) {
         if (mounted) {
@@ -352,21 +341,11 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                     _fetchData();
                   } on ApiError catch (e) {
                     if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('更新备注失败: ${e.message}'),
-                          backgroundColor: Colors.red,
-                        ),
-                      );
+                      context.showErrorSnackBar('更新备注失败: ${e.message}');
                     }
                   } catch (e) {
                     if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('更新备注失败: ${e.toString()}'),
-                          backgroundColor: Colors.red,
-                        ),
-                      );
+                      context.showErrorSnackBar('更新备注失败: ${e.toString()}');
                     }
                   }
                 },
@@ -438,12 +417,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
         _fetchData();
         
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('采购记录删除成功'),
-              backgroundColor: Colors.green,
-            ),
-          );
+          context.showSuccessSnackBar('采购记录删除成功');
         }
       } on ApiError catch (e) {
         if (mounted) {
@@ -715,11 +689,16 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
       body: Column(
         children: <Widget>[
           Expanded(
-              child: _isLoading
+              child: _isLoading && _purchases.isEmpty
                   ? Center(child: CircularProgressIndicator())
-                  : _filteredPurchases.isEmpty
-                  ? Center(
-                      child: SingleChildScrollView(
+                  : RefreshIndicator(
+                      onRefresh: () => _fetchData(isRefresh: true),
+                      child: _filteredPurchases.isEmpty
+                          ? SingleChildScrollView(
+                              physics: AlwaysScrollableScrollPhysics(),
+                              child: Container(
+                                height: MediaQuery.of(context).size.height * 0.7,
+                                child: Center(
                         child: Padding(
                           padding: EdgeInsets.all(16),
                           child: Column(
@@ -746,6 +725,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                                 textAlign: TextAlign.center,
                               ),
                             ],
+                                    ),
                           ),
                         ),
                       ),
@@ -932,6 +912,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                           ),
                         );
                       },
+                    ),
                     ),
             ),
             // 添加搜索栏和浮动按钮的容器

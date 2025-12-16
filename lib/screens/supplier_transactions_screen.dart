@@ -6,6 +6,7 @@ import '../repositories/remittance_repository.dart';
 import '../repositories/employee_repository.dart';
 import '../models/api_error.dart';
 import '../models/api_response.dart';
+import '../utils/snackbar_helper.dart';
 
 class SupplierTransactionsScreen extends StatefulWidget {
   final int supplierId;
@@ -132,24 +133,14 @@ class _SupplierTransactionsScreenState extends State<SupplierTransactionsScreen>
         _isLoading = false;
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('加载交易记录失败: ${e.message}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        context.showErrorSnackBar('加载交易记录失败: ${e.message}');
       }
     } catch (e) {
       setState(() {
         _isLoading = false;
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('加载交易记录失败: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        context.showErrorSnackBar('加载交易记录失败: ${e.toString()}');
       }
     }
   }

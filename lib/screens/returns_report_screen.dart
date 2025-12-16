@@ -13,6 +13,8 @@ import '../repositories/customer_repository.dart';
 import '../repositories/product_repository.dart';
 import '../models/api_error.dart';
 import '../models/api_response.dart';
+import '../utils/snackbar_helper.dart';
+import '../services/export_service.dart';
 
 class ReturnsReportScreen extends StatefulWidget {
   @override
@@ -97,24 +99,14 @@ class _ReturnsReportScreenState extends State<ReturnsReportScreen> {
         _isLoading = false;
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('加载数据失败: ${e.message}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        context.showErrorSnackBar('加载数据失败: ${e.message}');
       }
     } catch (e) {
       setState(() {
         _isLoading = false;
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('加载数据失败: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        context.showErrorSnackBar('加载数据失败: ${e.toString()}');
       }
     }
   }
@@ -517,7 +509,9 @@ class _ReturnsReportScreenState extends State<ReturnsReportScreen> {
           ),
           Divider(height: 1, thickness: 1, indent: 16, endIndent: 16),
           Expanded(
-            child: _returns.isEmpty
+            child: _isLoading && _allReturns.isEmpty
+                ? Center(child: CircularProgressIndicator())
+                : _returns.isEmpty
                 ? Center(
                     child: SingleChildScrollView(
                       child: Column(
@@ -855,58 +849,12 @@ class ReturnsTableScreen extends StatelessWidget {
     csvData += '总数量,${_formatNumber(totalQuantity)}\n';
     csvData += '总退款,${totalPrice.toStringAsFixed(2)}\n';
 
-    if (Platform.isMacOS || Platform.isWindows) {
-      // macOS 和 Windows: 使用 file_picker 让用户选择保存位置
-      String? selectedPath = await FilePicker.platform.saveFile(
-        dialogTitle: '保存退货报告',
-        fileName: 'returns_report.csv',
-        type: FileType.custom,
-        allowedExtensions: ['csv'],
-      );
-      
-      if (selectedPath != null) {
-        final file = File(selectedPath);
-        await file.writeAsString(csvData);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('导出成功: $selectedPath')),
-        );
-      }
-      return;
-    }
-
-    String path;
-    if (Platform.isAndroid) {
-      // 请求存储权限
-      if (await Permission.storage.request().isGranted) {
-        final directory = Directory('/storage/emulated/0/Download');
-        path = '${directory.path}/returns_report.csv';
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('存储权限被拒绝')),
-        );
-        return;
-      }
-    } else if (Platform.isIOS) {
-      final directory = await getApplicationDocumentsDirectory();
-      path = '${directory.path}/returns_report.csv';
-    } else {
-      // 其他平台使用应用文档目录作为后备方案
-      final directory = await getApplicationDocumentsDirectory();
-      path = '${directory.path}/returns_report.csv';
-    }
-
-    final file = File(path);
-    await file.writeAsString(csvData);
-
-    if (Platform.isIOS) {
-      // iOS 让用户手动选择存储位置
-      await Share.shareFiles([file.path], text: '退货报告 CSV 文件');
-    } else {
-      // Android 直接存入 Download 目录，并提示用户
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('导出成功: $path')),
-      );
-    }
+    // 使用统一的导出服务
+    await ExportService.showExportOptions(
+      context: context,
+      csvData: csvData,
+      baseFileName: '退货报告',
+    );
   }
 
   @override
@@ -919,7 +867,7 @@ class ReturnsTableScreen extends StatelessWidget {
         )),
         actions: [
           IconButton(
-            icon: Icon(Icons.download),
+            icon: Icon(Icons.share),
             tooltip: '导出 CSV',
             onPressed: () => _exportToCSV(context),
           ),
@@ -936,7 +884,7 @@ class ReturnsTableScreen extends StatelessWidget {
                 SizedBox(width: 8),
           Expanded(
                   child: Text(
-                    '横向和纵向滑动可查看更多数据，点击右上角图标可导出CSV文件',
+                    '横向和纵向滑动可查看完整表格，点击右上角图标可导出CSV文件',
                     style: TextStyle(
                       fontSize: 12,
                       color: Colors.red[800],

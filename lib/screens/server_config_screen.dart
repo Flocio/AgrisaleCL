@@ -7,6 +7,7 @@ import 'dart:convert';
 import 'dart:io';
 import '../services/api_service.dart';
 import '../models/api_error.dart';
+import '../utils/snackbar_helper.dart';
 
 class ServerConfigScreen extends StatefulWidget {
   @override
@@ -177,21 +178,11 @@ class _ServerConfigScreenState extends State<ServerConfigScreen> {
       });
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('服务器地址已保存'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        context.showSuccessSnackBar('服务器地址已保存');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('保存失败：${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        context.showErrorSnackBar('保存失败：${e.toString()}');
       }
     } finally {
       if (mounted) {
@@ -230,9 +221,7 @@ class _ServerConfigScreenState extends State<ServerConfigScreen> {
     try {
       final baseUrl = _serverUrlController.text.trim();
       if (baseUrl.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('请先输入服务器地址')),
-        );
+        context.showSnackBar('请先输入服务器地址');
         return;
       }
       
@@ -244,14 +233,10 @@ class _ServerConfigScreenState extends State<ServerConfigScreen> {
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('无法打开链接：$docUrl')),
-        );
+        context.showSnackBar('无法打开链接：$docUrl');
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('打开链接失败：${e.toString()}')),
-      );
+      context.showSnackBar('打开链接失败：${e.toString()}');
     }
   }
 

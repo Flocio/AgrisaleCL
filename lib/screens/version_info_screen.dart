@@ -5,6 +5,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/update_service.dart';
 import 'update_dialog.dart';
+import '../utils/snackbar_helper.dart';
 
 class VersionInfoScreen extends StatefulWidget {
   @override
@@ -46,13 +47,7 @@ class _VersionInfoScreenState extends State<VersionInfoScreen> {
           _updateInfo = updateInfo;
         } else {
           // 已是最新版本
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('当前已是最新版本'),
-              backgroundColor: Colors.green,
-              duration: Duration(seconds: 2),
-            ),
-          );
+          context.showSuccessSnackBar('当前已是最新版本');
         }
       });
     } catch (e) {
@@ -219,24 +214,12 @@ class _VersionInfoScreenState extends State<VersionInfoScreen> {
                                         await launchUrl(uri, mode: LaunchMode.externalApplication);
                                       } else {
                                         if (mounted) {
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            SnackBar(
-                                              content: Text('无法打开链接，请手动访问: $url'),
-                                              backgroundColor: Colors.orange,
-                                              duration: Duration(seconds: 3),
-                              ),
-                                          );
+                                          context.showWarningSnackBar('无法打开链接，请手动访问: $url');
                                         }
                                       }
                                     } catch (e) {
                                       if (mounted) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(
-                                            content: Text('打开链接失败: $e'),
-                                            backgroundColor: Colors.red,
-                                            duration: Duration(seconds: 3),
-                                  ),
-                                        );
+                                        context.showErrorSnackBar('打开链接失败: $e');
                                       }
                                     }
                                   },

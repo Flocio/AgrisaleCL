@@ -12,6 +12,8 @@ import '../repositories/remittance_repository.dart';
 import '../repositories/supplier_repository.dart';
 import '../models/api_error.dart';
 import '../models/api_response.dart';
+import '../utils/snackbar_helper.dart';
+import '../services/export_service.dart';
 
 class PurchaseRemittanceAnalysisScreen extends StatefulWidget {
   @override
@@ -46,7 +48,9 @@ class _PurchaseRemittanceAnalysisScreenState extends State<PurchaseRemittanceAna
 
   /// 首次加载时先获取供应商列表，再加载分析数据，避免供应商名称缺失显示为“未指定供应商”
   Future<void> _loadInitialData() async {
-    await _fetchSuppliers();
+    setState(() {
+      _isLoading = true;
+    });
     await _fetchAnalysisData();
   }
 
@@ -58,39 +62,32 @@ class _PurchaseRemittanceAnalysisScreenState extends State<PurchaseRemittanceAna
       });
     } on ApiError catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('加载供应商数据失败: ${e.message}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        context.showErrorSnackBar('加载供应商数据失败: ${e.message}');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('加载供应商数据失败: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        context.showErrorSnackBar('加载供应商数据失败: ${e.toString()}');
       }
     }
   }
 
   Future<void> _fetchAnalysisData() async {
-    setState(() {
-      _isLoading = true;
-    });
-
     try {
-      // 并行获取所有数据
+      // 并行获取所有数据（包括供应商数据）
       final results = await Future.wait([
+        _supplierRepo.getAllSuppliers(),
         _purchaseRepo.getPurchases(page: 1, pageSize: 10000),
         _remittanceRepo.getRemittances(page: 1, pageSize: 10000),
       ]);
       
-      final purchasesResponse = results[0] as PaginatedResponse<Purchase>;
-      final remittancesResponse = results[1] as PaginatedResponse<Remittance>;
+      // 先设置供应商数据，确保后续处理可以使用
+      final suppliers = results[0] as List<Supplier>;
+      setState(() {
+        _suppliers = suppliers;
+      });
+      
+      final purchasesResponse = results[1] as PaginatedResponse<Purchase>;
+      final remittancesResponse = results[2] as PaginatedResponse<Remittance>;
       
       // 应用日期筛选
       String? startDate = _selectedDateRange?.start.toIso8601String().split('T')[0];
@@ -206,25 +203,14 @@ class _PurchaseRemittanceAnalysisScreenState extends State<PurchaseRemittanceAna
         _isLoading = false;
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('加载数据失败: ${e.message}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        context.showErrorSnackBar('加载数据失败: ${e.message}');
       }
     } catch (e) {
       setState(() {
         _isLoading = false;
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('数据加载失败: ${e.toString()}'),
-            backgroundColor: Colors.red,
-            duration: Duration(seconds: 5),
-          ),
-        );
+        context.showErrorSnackBar('数据加载失败: ${e.toString()}');
       }
       print('采购汇款分析数据加载错误: $e');
     }
@@ -326,53 +312,12 @@ class _PurchaseRemittanceAnalysisScreenState extends State<PurchaseRemittanceAna
 
     String csv = const ListToCsvConverter().convert(rows);
 
-    if (Platform.isMacOS || Platform.isWindows) {
-      String? selectedPath = await FilePicker.platform.saveFile(
-        dialogTitle: '保存采购汇款分析报告',
-        fileName: 'purchase_remittance_analysis.csv',
-        type: FileType.custom,
-        allowedExtensions: ['csv'],
-      );
-      
-      if (selectedPath != null) {
-        final file = File(selectedPath);
-        await file.writeAsString(csv);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('导出成功: $selectedPath')),
-        );
-      }
-      return;
-    }
-
-    String path;
-    if (Platform.isAndroid) {
-      if (await Permission.storage.request().isGranted) {
-        final directory = Directory('/storage/emulated/0/Download');
-        path = '${directory.path}/purchase_remittance_analysis.csv';
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('存储权限被拒绝')),
-        );
-        return;
-      }
-    } else if (Platform.isIOS) {
-      final directory = await getApplicationDocumentsDirectory();
-      path = '${directory.path}/purchase_remittance_analysis.csv';
-    } else {
-      final directory = await getApplicationDocumentsDirectory();
-      path = '${directory.path}/purchase_remittance_analysis.csv';
-    }
-
-    final file = File(path);
-    await file.writeAsString(csv);
-
-    if (Platform.isIOS) {
-      await Share.shareFiles([file.path], text: '采购汇款分析报告 CSV 文件');
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('导出成功: $path')),
-      );
-    }
+    // 使用统一的导出服务
+    await ExportService.showExportOptions(
+      context: context,
+      csvData: csv,
+      baseFileName: '采购汇款分析',
+    );
   }
 
   @override
@@ -389,7 +334,7 @@ class _PurchaseRemittanceAnalysisScreenState extends State<PurchaseRemittanceAna
             onPressed: _fetchAnalysisData,
           ),
           IconButton(
-            icon: Icon(Icons.download),
+            icon: Icon(Icons.share),
             tooltip: '导出 CSV',
             onPressed: _exportToCSV,
           ),

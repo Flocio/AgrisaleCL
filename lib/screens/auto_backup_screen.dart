@@ -4,6 +4,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/auto_backup_service.dart';
 import '../widgets/footer_widget.dart';
+import '../utils/snackbar_helper.dart';
 
 class AutoBackupScreen extends StatefulWidget {
   @override
@@ -69,12 +70,7 @@ class _AutoBackupScreenState extends State<AutoBackupScreen> {
         _isLoading = false;
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('加载设置失败: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        context.showErrorSnackBar('加载设置失败: ${e.toString()}');
       }
     }
   }
@@ -105,12 +101,7 @@ class _AutoBackupScreenState extends State<AutoBackupScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('保存设置失败: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        context.showErrorSnackBar('保存设置失败: ${e.toString()}');
       }
     }
   }
@@ -125,14 +116,10 @@ class _AutoBackupScreenState extends State<AutoBackupScreen> {
     
     if (enabled) {
       await _backupService.startAutoBackup(_autoBackupInterval);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('自动备份已开启'), backgroundColor: Colors.green),
-      );
+      context.showSuccessSnackBar('自动备份已开启');
     } else {
       await _backupService.stopAutoBackup();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('自动备份已关闭')),
-      );
+      context.showSnackBar('自动备份已关闭');
     }
   }
   
@@ -147,9 +134,7 @@ class _AutoBackupScreenState extends State<AutoBackupScreen> {
     // 如果自动备份已开启，使用新间隔从当前时间重新计算
     if (_autoBackupEnabled) {
       await _backupService.restartWithNewInterval(_autoBackupInterval);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('备份间隔已更新为 ${_formatInterval(interval)}')),
-      );
+      context.showSnackBar('备份间隔已更新为 ${_formatInterval(interval)}');
     }
   }
   
@@ -218,15 +203,14 @@ class _AutoBackupScreenState extends State<AutoBackupScreen> {
     Navigator.of(context).pop(); // 关闭加载对话框
     
     if (success) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('手动备份成功'), backgroundColor: Colors.green),
-      );
-      _loadBackupSettings();
-      _loadBackupCount();
+      context.showSuccessSnackBar('手动备份成功');
+      // 并行加载设置和备份数量
+      Future.wait([
+        _loadBackupSettings(),
+        _loadBackupCount(),
+      ]);
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('备份失败'), backgroundColor: Colors.red),
-      );
+      context.showErrorSnackBar('备份失败');
     }
   }
 

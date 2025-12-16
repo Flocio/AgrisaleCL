@@ -259,8 +259,10 @@ class AutoBackupService {
         return false;
       }
 
-      // 并行获取当前用户的所有数据（从 API）
-      final results = await Future.wait([
+      // 并行获取所有数据、应用版本号和备份目录（这些操作互不依赖）
+      final allResults = await Future.wait([
+        // 数据获取
+        Future.wait([
         _productRepo.getProducts(page: 1, pageSize: 10000),
         _supplierRepo.getAllSuppliers(),
         _customerRepo.getAllCustomers(),
@@ -270,7 +272,17 @@ class AutoBackupService {
         _returnRepo.getReturns(page: 1, pageSize: 10000),
         _incomeRepo.getIncomes(page: 1, pageSize: 10000),
         _remittanceRepo.getRemittances(page: 1, pageSize: 10000),
+        ]),
+        // 应用版本号
+        PackageInfo.fromPlatform(),
+        // 备份目录
+        getAutoBackupDirectory(),
       ]);
+      
+      final results = allResults[0] as List;
+      final packageInfo = allResults[1] as PackageInfo;
+      final backupDir = allResults[2] as Directory;
+      final appVersion = packageInfo.version;
       
       // 转换为 Map 格式以保持兼容性
       final products = (results[0] as PaginatedResponse).items.map((p) => p.toJson()).toList();
@@ -282,10 +294,6 @@ class AutoBackupService {
       final returns = (results[6] as PaginatedResponse).items.map((r) => r.toJson()).toList();
       final income = (results[7] as PaginatedResponse).items.map((i) => i.toJson()).toList();
       final remittance = (results[8] as PaginatedResponse).items.map((r) => r.toJson()).toList();
-      
-      // 获取应用版本号
-      final packageInfo = await PackageInfo.fromPlatform();
-      final appVersion = packageInfo.version;
       
       // 构建备份数据
       final backupData = {
@@ -315,23 +323,23 @@ class AutoBackupService {
       final now = DateTime.now();
       final fileName = 'auto_backup_${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}_${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}${now.second.toString().padLeft(2, '0')}.json';
       
-      // 获取备份目录并保存
-      final backupDir = await getAutoBackupDirectory();
+      // 保存文件
       final file = File('${backupDir.path}/$fileName');
       await file.writeAsString(jsonString);
       
       print('自动备份成功: $fileName');
       
-      // 更新最后备份时间（保存到本地 SharedPreferences）
+      // 更新最后备份时间（保存到本地 SharedPreferences，重用已获取的 prefs 实例）
       try {
-        final prefs = await SharedPreferences.getInstance();
         await prefs.setString('last_backup_time', DateTime.now().toIso8601String());
       } catch (e) {
         print('更新备份时间失败: $e');
       }
       
-      // 清理旧备份
-      await _cleanOldBackups();
+      // 清理旧备份（异步执行，不阻塞返回）
+      _cleanOldBackups().catchError((e) {
+        print('清理旧备份失败: $e');
+      });
       
       _isBackupRunning = false;
       return true;

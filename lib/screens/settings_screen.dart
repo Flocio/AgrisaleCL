@@ -23,6 +23,8 @@ import '../services/auth_service.dart';
 import '../services/user_status_service.dart';
 import '../models/api_error.dart';
 import '../models/api_response.dart';
+import '../utils/snackbar_helper.dart';
+import '../services/export_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   @override
@@ -76,21 +78,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
       });
     } on ApiError catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('加载设置失败: ${e.message}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        context.showErrorSnackBar('加载设置失败: ${e.message}');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('加载设置失败: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        context.showErrorSnackBar('加载设置失败: ${e.toString()}');
       }
     }
   }
@@ -105,22 +97,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return true; // 保存成功
     } on ApiError catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('保存设置失败: ${e.message}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        context.showErrorSnackBar('保存设置失败: ${e.message}');
       }
       return false; // 保存失败
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('保存设置失败: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        context.showErrorSnackBar('保存设置失败: ${e.toString()}');
       }
       return false; // 保存失败
     }
@@ -139,9 +121,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _manualSaveSettings() async {
     final success = await _saveSettings();
     if (success) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('设置已保存')),
-      );
+      context.showSnackBar('设置已保存');
     }
     // 如果保存失败，重新从服务器加载设置以恢复一致状态
     if (!success) {
@@ -160,31 +140,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _newPasswordController.text,
       );
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('密码已更新'),
-          backgroundColor: Colors.green,
-        ),
-      );
+      context.showSuccessSnackBar('密码已更新');
 
       // 清空输入框
       _currentPasswordController.clear();
       _newPasswordController.clear();
       _confirmPasswordController.clear();
     } on ApiError catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('更新密码失败: ${e.message}'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      context.showErrorSnackBar('更新密码失败: ${e.message}');
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('更新密码失败: ${e.toString()}'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      context.showErrorSnackBar('更新密码失败: ${e.toString()}');
     }
   }
 
@@ -195,9 +160,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final username = prefs.getString('current_username');
       
       if (username == null) {
-    ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('请先登录')),
-      );
+    context.showSnackBar('请先登录');
       return;
     }
 
@@ -220,9 +183,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final userInfo = await _authService.getCurrentUser();
       if (userInfo == null) {
         Navigator.of(context).pop(); // 关闭加载对话框
-    ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('请先登录')),
-        );
+    context.showSnackBar('请先登录');
         return;
       }
 
@@ -276,86 +237,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
       // 转换为JSON
       final jsonString = jsonEncode(exportData);
       
-      // 生成文件名
+      // 生成文件名（保持原有格式）
       final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-').substring(0, 19);
       final fileName = '${username}_农资数据_$timestamp.json';
-
-      if (Platform.isMacOS || Platform.isWindows) {
-        // macOS 和 Windows: 使用 file_picker 让用户选择保存位置
-        String? selectedPath = await FilePicker.platform.saveFile(
-          dialogTitle: '保存数据备份',
-          fileName: fileName,
-          type: FileType.custom,
-          allowedExtensions: ['json'],
-        );
-        
-        if (selectedPath != null) {
-          final file = File(selectedPath);
-          await file.writeAsString(jsonString);
           
           Navigator.of(context).pop(); // 关闭加载对话框
           
-    ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('数据导出成功: $selectedPath'),
-              duration: Duration(seconds: 3),
-            ),
-    );
-        } else {
-          Navigator.of(context).pop(); // 关闭加载对话框
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('已取消导出')),
-    );
-  }
-        return;
-      }
-
-      String path;
-      if (Platform.isAndroid) {
-        // 请求存储权限
-        if (await Permission.storage.request().isGranted) {
-          final directory = Directory('/storage/emulated/0/Download');
-          path = '${directory.path}/$fileName';
-        } else {
-          Navigator.of(context).pop(); // 关闭加载对话框
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('存储权限被拒绝')),
-          );
-          return;
-        }
-      } else if (Platform.isIOS) {
-        final directory = await getApplicationDocumentsDirectory();
-        path = '${directory.path}/$fileName';
-      } else {
-        // 其他平台使用应用文档目录作为后备方案
-        final directory = await getApplicationDocumentsDirectory();
-        path = '${directory.path}/$fileName';
-      }
-
-      // 写入文件
-      final file = File(path);
-      await file.writeAsString(jsonString);
-
-      Navigator.of(context).pop(); // 关闭加载对话框
-
-      if (Platform.isIOS) {
-        // iOS 让用户手动选择存储位置
-        await Share.shareFiles([file.path], text: 'AgrisaleCL数据备份文件');
-      } else {
-        // Android 直接存入 Download 目录，并提示用户
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('数据导出成功: $path'),
-            duration: Duration(seconds: 3),
-          ),
-        );
-      }
+      // 使用统一的导出服务
+      await ExportService.showJSONExportOptions(
+        context: context,
+        jsonData: jsonString,
+        fileName: fileName,
+      );
 
     } catch (e) {
       Navigator.of(context).pop(); // 关闭加载对话框
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('导出失败: $e')),
-      );
+      context.showSnackBar('导出失败: $e');
     }
   }
 
@@ -366,9 +263,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final username = prefs.getString('current_username');
       
       if (username == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('请先登录')),
-    );
+        context.showSnackBar('请先登录');
         return;
       }
 
@@ -387,9 +282,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         
         // 验证数据格式
         if (!importData.containsKey('exportInfo') || !importData.containsKey('data')) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('文件格式错误，请选择正确的备份文件')),
-          );
+          context.showSnackBar('文件格式错误，请选择正确的备份文件');
           return;
         }
 
@@ -584,48 +477,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ? '供应商: ${counts['suppliers']}, 客户: ${counts['customers']}, 员工: ${counts['employees']}, 产品: ${counts['products']}, 采购: ${counts['purchases']}, 销售: ${counts['sales']}, 退货: ${counts['returns']}, 进账: ${counts['income']}, 汇款: ${counts['remittance']}'
               : '';
 
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('数据覆盖成功！\n$countsText'),
-              backgroundColor: Colors.green,
-              duration: Duration(seconds: 5),
-            ),
-          );
+          context.showSuccessSnackBar('数据覆盖成功！\n$countsText');
 
           // 重新加载设置
           _loadSystemSettings();
         } on ApiError catch (e) {
           Navigator.of(context).pop(); // 关闭加载对话框
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('数据导入失败: ${e.message}'),
-              backgroundColor: Colors.red,
-            ),
-          );
+          context.showErrorSnackBar('数据导入失败: ${e.message}');
         } catch (e) {
           Navigator.of(context).pop(); // 关闭加载对话框
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('数据导入失败: ${e.toString()}'),
-              backgroundColor: Colors.red,
-            ),
-          );
+          context.showErrorSnackBar('数据导入失败: ${e.toString()}');
         }
 
 
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('未选择文件')),
-        );
+        context.showSnackBar('未选择文件');
       }
 
     } catch (e) {
       if (Navigator.of(context).canPop()) {
         Navigator.of(context).pop(); // 关闭加载对话框
       }
-    ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('数据恢复失败: $e')),
-    );
+    context.showSnackBar('数据恢复失败: $e');
     }
   }
   

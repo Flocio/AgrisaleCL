@@ -13,6 +13,8 @@ import '../repositories/purchase_repository.dart';
 import '../repositories/product_repository.dart';
 import '../models/api_error.dart';
 import '../models/api_response.dart';
+import '../utils/snackbar_helper.dart';
+import '../services/export_service.dart';
 
 class SupplierRecordsScreen extends StatefulWidget {
   final int supplierId;
@@ -35,15 +37,26 @@ class _SupplierRecordsScreenState extends State<SupplierRecordsScreen> {
   bool _isSummaryExpanded = true; // 汇总信息是否展开
   bool _isLoading = false;
   
+  // 日期筛选相关变量
+  DateTimeRange? _selectedDateRange;
+  
   // 汇总数据
   double _totalQuantity = 0.0;
   double _totalAmount = 0.0;
+  
+  // 滚动控制器
+  final ScrollController _summaryScrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
-    _fetchProducts();
     _fetchRecords();
+  }
+  
+  @override
+  void dispose() {
+    _summaryScrollController.dispose();
+    super.dispose();
   }
 
   // 格式化数字方法：整数显示为整数，小数显示为小数
@@ -65,21 +78,11 @@ class _SupplierRecordsScreenState extends State<SupplierRecordsScreen> {
       });
     } on ApiError catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('加载产品数据失败: ${e.message}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        context.showErrorSnackBar('加载产品数据失败: ${e.message}');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('加载产品数据失败: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        context.showErrorSnackBar('加载产品数据失败: ${e.toString()}');
       }
     }
   }
@@ -90,7 +93,19 @@ class _SupplierRecordsScreenState extends State<SupplierRecordsScreen> {
     });
 
     try {
-      final purchasesResponse = await _purchaseRepo.getPurchases(page: 1, pageSize: 10000);
+      // 并行获取所有数据（包括产品数据）
+      final results = await Future.wait([
+        _productRepo.getProducts(page: 1, pageSize: 10000),
+        _purchaseRepo.getPurchases(page: 1, pageSize: 10000),
+      ]);
+      
+      // 先设置产品数据，确保后续处理可以使用
+      final productsResponse = results[0] as PaginatedResponse<Product>;
+      setState(() {
+        _products = productsResponse.items;
+      });
+      
+      final purchasesResponse = results[1] as PaginatedResponse<Purchase>;
       
       // 按供应商ID筛选
       List<Purchase> purchases = purchasesResponse.items.where((p) => p.supplierId == widget.supplierId).toList();
@@ -98,6 +113,13 @@ class _SupplierRecordsScreenState extends State<SupplierRecordsScreen> {
       // 应用产品筛选
       if (_selectedProduct != null && _selectedProduct != '所有产品') {
         purchases = purchases.where((p) => p.productName == _selectedProduct).toList();
+      }
+      
+      // 应用日期筛选
+      if (_selectedDateRange != null) {
+        final startDate = _selectedDateRange!.start.toIso8601String().split('T')[0];
+        final endDate = _selectedDateRange!.end.toIso8601String().split('T')[0];
+        purchases = purchases.where((p) => p.purchaseDate != null && p.purchaseDate!.compareTo(startDate) >= 0 && p.purchaseDate!.compareTo(endDate) <= 0).toList();
       }
       
       // 按日期排序
@@ -143,24 +165,14 @@ class _SupplierRecordsScreenState extends State<SupplierRecordsScreen> {
         _isLoading = false;
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('加载记录失败: ${e.message}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        context.showErrorSnackBar('加载记录失败: ${e.message}');
       }
     } catch (e) {
       setState(() {
         _isLoading = false;
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('加载记录失败: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        context.showErrorSnackBar('加载记录失败: ${e.toString()}');
       }
     }
   }
@@ -191,6 +203,16 @@ class _SupplierRecordsScreenState extends State<SupplierRecordsScreen> {
     rows.add(['导出时间: ${DateTime.now().toString().substring(0, 19)}']);
     rows.add(['供应商: ${widget.supplierName}']);
     rows.add(['产品筛选: $_selectedProduct']);
+    
+    // 添加日期筛选信息
+    String dateFilterInfo;
+    if (_selectedDateRange != null) {
+      dateFilterInfo = '日期筛选: 日期范围 (${_selectedDateRange!.start.year}-${_selectedDateRange!.start.month.toString().padLeft(2, '0')}-${_selectedDateRange!.start.day.toString().padLeft(2, '0')} 至 ${_selectedDateRange!.end.year}-${_selectedDateRange!.end.month.toString().padLeft(2, '0')}-${_selectedDateRange!.end.day.toString().padLeft(2, '0')})';
+    } else {
+      dateFilterInfo = '日期筛选: 所有日期';
+    }
+    rows.add([dateFilterInfo]);
+    
     rows.add([]); // 空行
     // 修改表头为中文
     rows.add(['日期', '产品', '数量', '单位', '总价', '备注']);
@@ -218,58 +240,20 @@ class _SupplierRecordsScreenState extends State<SupplierRecordsScreen> {
 
     String csv = const ListToCsvConverter().convert(rows);
 
-    if (Platform.isMacOS || Platform.isWindows) {
-      // macOS 和 Windows: 使用 file_picker 让用户选择保存位置
-      String? selectedPath = await FilePicker.platform.saveFile(
-        dialogTitle: '保存供应商采购记录',
-        fileName: '${widget.supplierName}_purchases.csv',
-        type: FileType.custom,
-        allowedExtensions: ['csv'],
-      );
-      
-      if (selectedPath != null) {
-        final file = File(selectedPath);
-        await file.writeAsString(csv);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('导出成功: $selectedPath')),
-        );
-      }
-      return;
-    }
-
-    String path;
-    if (Platform.isAndroid) {
-      // 请求存储权限
-      if (await Permission.storage.request().isGranted) {
-        final directory = Directory('/storage/emulated/0/Download');
-        path = '${directory.path}/${widget.supplierName}_purchases.csv';
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('存储权限被拒绝')),
-        );
-        return;
-      }
-    } else if (Platform.isIOS) {
-      final directory = await getApplicationDocumentsDirectory();
-      path = '${directory.path}/${widget.supplierName}_purchases.csv';
+    // 生成文件名：如果筛选了产品，格式为"{供应商名}_{产品名}_采购记录"，否则为"{供应商名}_采购记录"
+    String baseFileName;
+    if (_selectedProduct != null && _selectedProduct != '所有产品') {
+      baseFileName = '${widget.supplierName}_${_selectedProduct}_采购记录';
     } else {
-      // 其他平台使用应用文档目录作为后备方案
-      final directory = await getApplicationDocumentsDirectory();
-      path = '${directory.path}/${widget.supplierName}_purchases.csv';
+      baseFileName = '${widget.supplierName}_采购记录';
     }
 
-    final file = File(path);
-    await file.writeAsString(csv);
-
-    if (Platform.isIOS) {
-      // iOS 让用户手动选择存储位置
-      await Share.shareFiles([file.path], text: '${widget.supplierName}的采购记录 CSV 文件');
-    } else {
-      // Android 直接存入 Download 目录，并提示用户
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('导出成功: $path')),
-      );
-    }
+    // 使用统一的导出服务
+    await ExportService.showExportOptions(
+      context: context,
+      csvData: csv,
+      baseFileName: baseFileName,
+    );
   }
 
   void _toggleSortOrder() {
@@ -283,7 +267,7 @@ class _SupplierRecordsScreenState extends State<SupplierRecordsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('${widget.supplierName}的采购记录', style: TextStyle(
+        title: Text('${widget.supplierName}的记录', style: TextStyle(
           fontWeight: FontWeight.bold,
           color: Colors.white,
         )),
@@ -294,7 +278,7 @@ class _SupplierRecordsScreenState extends State<SupplierRecordsScreen> {
             onPressed: _toggleSortOrder,
           ),
           IconButton(
-            icon: Icon(Icons.download),
+            icon: Icon(Icons.share),
             tooltip: '导出 CSV',
             onPressed: _exportToCSV,
           ),
@@ -302,15 +286,17 @@ class _SupplierRecordsScreenState extends State<SupplierRecordsScreen> {
       ),
       body: Column(
         children: [
-          // 产品筛选条件
+          // 筛选条件 - 产品和日期在同一行
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             color: Colors.blue[50],
             child: Row(
               children: [
+                // 产品筛选
                 Icon(Icons.filter_alt, color: Colors.blue[700], size: 20),
-                SizedBox(width: 12),
+                SizedBox(width: 8),
                 Expanded(
+                  flex: 1,
                   child: DropdownButtonHideUnderline(
                     child: Container(
                       padding: EdgeInsets.symmetric(horizontal: 12),
@@ -330,7 +316,7 @@ class _SupplierRecordsScreenState extends State<SupplierRecordsScreen> {
                             _fetchRecords();
                           });
                         },
-                        style: TextStyle(color: Colors.black87, fontSize: 15),
+                        style: TextStyle(color: Colors.black87, fontSize: 14),
                         items: [
                           DropdownMenuItem<String>(
                             value: '所有产品',
@@ -342,6 +328,82 @@ class _SupplierRecordsScreenState extends State<SupplierRecordsScreen> {
                               child: Text(product.name),
                             );
                           }).toList(),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                SizedBox(width: 12),
+                // 日期范围选择器
+                Icon(Icons.date_range, color: Colors.blue[700], size: 20),
+                SizedBox(width: 8),
+                Expanded(
+                  flex: 1,
+                  child: InkWell(
+                    onTap: () async {
+                      final now = DateTime.now();
+                      final initialDateRange = _selectedDateRange ??
+                          DateTimeRange(
+                            start: now.subtract(Duration(days: 30)),
+                            end: now,
+                          );
+                      
+                      final pickedRange = await showDateRangePicker(
+                        context: context,
+                        initialDateRange: initialDateRange,
+                        firstDate: DateTime(2000),
+                        lastDate: DateTime.now(),
+                        builder: (context, child) {
+                          return Theme(
+                            data: Theme.of(context).copyWith(
+                              colorScheme: ColorScheme.light(primary: Colors.blue),
+                            ),
+                            child: child!,
+                          );
+                        },
+                      );
+                      
+                      if (pickedRange != null) {
+                        setState(() {
+                          _selectedDateRange = pickedRange;
+                          _fetchRecords();
+                        });
+                      }
+                    },
+                    child: Container(
+                      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.blue[300]!),
+                        color: Colors.white,
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _selectedDateRange != null
+                                  ? '${_selectedDateRange!.start.year}-${_selectedDateRange!.start.month.toString().padLeft(2, '0')}-${_selectedDateRange!.start.day.toString().padLeft(2, '0')} 至 ${_selectedDateRange!.end.year}-${_selectedDateRange!.end.month.toString().padLeft(2, '0')}-${_selectedDateRange!.end.day.toString().padLeft(2, '0')}'
+                                  : '日期范围',
+                              style: TextStyle(
+                                color: _selectedDateRange != null ? Colors.black87 : Colors.grey[600],
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                          if (_selectedDateRange != null)
+                            GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  _selectedDateRange = null;
+                                  _fetchRecords();
+                                });
+                              },
+                              child: Padding(
+                                padding: EdgeInsets.only(right: 8),
+                                child: Icon(Icons.clear, color: Colors.blue[700], size: 18),
+                              ),
+                            ),
+                          Icon(Icons.arrow_drop_down, color: Colors.blue[700]),
                         ],
                       ),
                     ),
@@ -363,7 +425,7 @@ class _SupplierRecordsScreenState extends State<SupplierRecordsScreen> {
                 SizedBox(width: 8),
           Expanded(
                   child: Text(
-                    '横向和纵向滑动可查看更多数据，点击右上角图标可导出CSV文件',
+                    '横向和纵向滑动可查看完整表格，点击右上角图标可导出CSV文件',
                     style: TextStyle(
                       fontSize: 12,
                       color: Colors.blue[800],
@@ -418,7 +480,11 @@ class _SupplierRecordsScreenState extends State<SupplierRecordsScreen> {
             ),
           ),
           Divider(height: 1, thickness: 1, indent: 16, endIndent: 16),
-          _purchases.isEmpty
+          _isLoading && _purchases.isEmpty
+              ? Expanded(
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              : _purchases.isEmpty
               ? Expanded(
                   child: Center(
                     child: SingleChildScrollView(
@@ -613,7 +679,7 @@ class _SupplierRecordsScreenState extends State<SupplierRecordsScreen> {
                     Icon(Icons.business, color: Colors.blue, size: 16),
                     SizedBox(width: 8),
                     Text(
-                      '${widget.supplierName} - ${_selectedProduct ?? '所有产品'}',
+                      '${widget.supplierName}    ${_selectedProduct ?? '所有产品'}',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
@@ -640,7 +706,7 @@ class _SupplierRecordsScreenState extends State<SupplierRecordsScreen> {
                       ),
                       SizedBox(width: 4),
                       Icon(
-                        _isSummaryExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                        _isSummaryExpanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_up,
                         size: 16,
                         color: Colors.blue[800],
                       ),
@@ -652,24 +718,27 @@ class _SupplierRecordsScreenState extends State<SupplierRecordsScreen> {
             if (_isSummaryExpanded) ...[
               Divider(height: 16, thickness: 1),
               
-              // 记录数和平均单价
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  _buildSummaryItem('采购记录数', '${_purchases.length}', Colors.purple),
-                  _buildSummaryItem('平均单价', _totalQuantity > 0 ? '¥${(_totalAmount / _totalQuantity).toStringAsFixed(2)}' : '¥0.00', Colors.orange),
-                ],
+              // 单行横向滚动显示所有汇总信息
+              SingleChildScrollView(
+                controller: _summaryScrollController,
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    SizedBox(width: 8),
+                    _buildSummaryItem('采购记录数', '${_purchases.length}', Colors.purple),
+                    SizedBox(width: 16),
+                    _buildSummaryItem('采购总量', '${_formatNumber(_totalQuantity)}', Colors.green),
+                    SizedBox(width: 16),
+                    _buildSummaryItem('采购总额', '¥${_totalAmount.toStringAsFixed(2)}', Colors.green),
+                    SizedBox(width: 16),
+                    _buildSummaryItem('平均单价', _totalQuantity > 0 ? '¥${(_totalAmount / _totalQuantity).toStringAsFixed(2)}' : '¥0.00', Colors.orange),
+                    SizedBox(width: 8),
+                  ],
+                ),
               ),
-              SizedBox(height: 12),
               
-              // 总数量和总金额
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  _buildSummaryItem('采购总量', '${_formatNumber(_totalQuantity)}', Colors.green),
-                  _buildSummaryItem('采购总额', '¥${_totalAmount.toStringAsFixed(2)}', Colors.green),
-                ],
-              ),
+              // 滚动位置指示器
+              _buildScrollIndicator(),
             ],
           ],
         ),
@@ -688,6 +757,7 @@ class _SupplierRecordsScreenState extends State<SupplierRecordsScreen> {
             color: Colors.grey[700],
           ),
         ),
+        SizedBox(height: 6), // 增加名称和数字之间的距离
         Text(
           value,
           style: TextStyle(
@@ -697,6 +767,54 @@ class _SupplierRecordsScreenState extends State<SupplierRecordsScreen> {
           ),
         ),
       ],
+    );
+  }
+  
+  // 滚动位置指示器
+  Widget _buildScrollIndicator() {
+    return AnimatedBuilder(
+      animation: _summaryScrollController,
+      builder: (context, child) {
+        if (!_summaryScrollController.hasClients) {
+          return SizedBox(height: 4);
+        }
+        
+        final position = _summaryScrollController.position;
+        if (position == null || position.maxScrollExtent == 0) {
+          return SizedBox(height: 4);
+        }
+        
+        final scrollRatio = position.pixels / position.maxScrollExtent;
+        final indicatorWidth = MediaQuery.of(context).size.width - 32; // 减去卡片左右边距
+        final thumbWidth = 40.0;
+        final maxLeft = indicatorWidth - thumbWidth;
+        final thumbLeft = scrollRatio * maxLeft;
+        
+        return Container(
+          margin: EdgeInsets.only(top: 8),
+          height: 4,
+          width: indicatorWidth,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(2),
+            color: Colors.grey[300],
+          ),
+          child: Stack(
+            children: [
+              Positioned(
+                left: thumbLeft,
+                child: Container(
+                  width: thumbWidth,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(2),
+                    color: Colors.blue[700],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

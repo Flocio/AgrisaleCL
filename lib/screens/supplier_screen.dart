@@ -6,6 +6,7 @@ import 'supplier_records_screen.dart';
 import 'supplier_transactions_screen.dart';
 import '../repositories/supplier_repository.dart';
 import '../models/api_error.dart';
+import '../utils/snackbar_helper.dart';
 
 class SupplierScreen extends StatefulWidget {
   @override
@@ -60,42 +61,41 @@ class _SupplierScreenState extends State<SupplierScreen> {
     });
   }
 
-  Future<void> _fetchSuppliers() async {
+  Future<void> _fetchSuppliers({bool isRefresh = false}) async {
+    if (!isRefresh) {
     setState(() {
       _isLoading = true;
     });
+    }
     
     try {
       final suppliers = await _supplierRepo.getAllSuppliers();
       
       setState(() {
         _suppliers = suppliers;
-        _filteredSuppliers = suppliers;
         _isLoading = false;
       });
+      
+      // 刷新后重新应用过滤条件
+      if (isRefresh) {
+        _filterSuppliers();
+      } else {
+        // 初始加载时也应用过滤
+        _filterSuppliers();
+      }
     } on ApiError catch (e) {
       setState(() {
         _isLoading = false;
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('获取供应商列表失败: ${e.message}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        context.showErrorSnackBar('获取供应商列表失败: ${e.message}');
       }
     } catch (e) {
       setState(() {
         _isLoading = false;
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('获取供应商列表失败: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        context.showErrorSnackBar('获取供应商列表失败: ${e.toString()}');
       }
     }
   }
@@ -118,30 +118,15 @@ class _SupplierScreenState extends State<SupplierScreen> {
         _fetchSuppliers();
         
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('供应商添加成功'),
-              backgroundColor: Colors.green,
-            ),
-          );
+          context.showSuccessSnackBar('供应商添加成功');
         }
       } on ApiError catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(e.message),
-              backgroundColor: Colors.red,
-            ),
-          );
+          context.showErrorSnackBar(e.message);
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('添加供应商失败: ${e.toString()}'),
-              backgroundColor: Colors.red,
-            ),
-          );
+          context.showErrorSnackBar('添加供应商失败: ${e.toString()}');
         }
       }
     }
@@ -165,30 +150,15 @@ class _SupplierScreenState extends State<SupplierScreen> {
         _fetchSuppliers();
         
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('供应商更新成功'),
-              backgroundColor: Colors.green,
-            ),
-          );
+          context.showSuccessSnackBar('供应商更新成功');
         }
       } on ApiError catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(e.message),
-              backgroundColor: Colors.red,
-            ),
-          );
+          context.showErrorSnackBar(e.message);
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('更新供应商失败: ${e.toString()}'),
-              backgroundColor: Colors.red,
-            ),
-          );
+          context.showErrorSnackBar('更新供应商失败: ${e.toString()}');
         }
       }
     }
@@ -227,30 +197,15 @@ class _SupplierScreenState extends State<SupplierScreen> {
         _fetchSuppliers();
         
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('供应商删除成功'),
-              backgroundColor: Colors.green,
-            ),
-          );
+          context.showSuccessSnackBar('供应商删除成功');
         }
       } on ApiError catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(e.message),
-              backgroundColor: Colors.red,
-            ),
-          );
+          context.showErrorSnackBar(e.message);
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('删除供应商失败: ${e.toString()}'),
-              backgroundColor: Colors.red,
-            ),
-          );
+          context.showErrorSnackBar('删除供应商失败: ${e.toString()}');
         }
       }
     }
@@ -328,11 +283,16 @@ class _SupplierScreenState extends State<SupplierScreen> {
             ),
             Divider(height: 1, thickness: 1, indent: 16, endIndent: 16),
           Expanded(
-              child: _isLoading
+              child: _isLoading && _suppliers.isEmpty
                   ? Center(child: CircularProgressIndicator())
-                  : _filteredSuppliers.isEmpty
-                      ? Center(
-                          child: SingleChildScrollView(
+                  : RefreshIndicator(
+                      onRefresh: () => _fetchSuppliers(isRefresh: true),
+                      child: _filteredSuppliers.isEmpty
+                          ? SingleChildScrollView(
+                              physics: AlwaysScrollableScrollPhysics(),
+                              child: Container(
+                                height: MediaQuery.of(context).size.height * 0.7,
+                                child: Center(
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               mainAxisSize: MainAxisSize.min,
@@ -355,6 +315,7 @@ class _SupplierScreenState extends State<SupplierScreen> {
                                   ),
                                 ),
                               ],
+                                  ),
                             ),
                           ),
                         )
@@ -476,6 +437,7 @@ class _SupplierScreenState extends State<SupplierScreen> {
                   ),
                 );
               },
+            ),
             ),
           ),
             // 添加搜索栏和浮动按钮的容器

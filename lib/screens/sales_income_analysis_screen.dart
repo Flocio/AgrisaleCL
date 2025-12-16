@@ -13,6 +13,8 @@ import '../repositories/income_repository.dart';
 import '../repositories/customer_repository.dart';
 import '../models/api_error.dart';
 import '../models/api_response.dart';
+import '../utils/snackbar_helper.dart';
+import '../services/export_service.dart';
 
 class SalesIncomeAnalysisScreen extends StatefulWidget {
   @override
@@ -49,7 +51,9 @@ class _SalesIncomeAnalysisScreenState extends State<SalesIncomeAnalysisScreen> {
 
   /// 首次加载时先拉取客户列表，再加载分析数据，避免客户名称缺失显示为“未指定客户”
   Future<void> _loadInitialData() async {
-    await _fetchCustomers();
+    setState(() {
+      _isLoading = true;
+    });
     await _fetchAnalysisData();
   }
 
@@ -61,41 +65,34 @@ class _SalesIncomeAnalysisScreenState extends State<SalesIncomeAnalysisScreen> {
       });
     } on ApiError catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('加载客户数据失败: ${e.message}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        context.showErrorSnackBar('加载客户数据失败: ${e.message}');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('加载客户数据失败: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        context.showErrorSnackBar('加载客户数据失败: ${e.toString()}');
       }
     }
   }
 
   Future<void> _fetchAnalysisData() async {
-    setState(() {
-      _isLoading = true;
-    });
-
     try {
-      // 并行获取所有数据
+      // 并行获取所有数据（包括客户数据）
       final results = await Future.wait([
+        _customerRepo.getAllCustomers(),
         _saleRepo.getSales(page: 1, pageSize: 10000),
         _returnRepo.getReturns(page: 1, pageSize: 10000),
         _incomeRepo.getIncomes(page: 1, pageSize: 10000),
       ]);
       
-      final salesResponse = results[0] as PaginatedResponse<Sale>;
-      final returnsResponse = results[1] as PaginatedResponse<Return>;
-      final incomesResponse = results[2] as PaginatedResponse<Income>;
+      // 先设置客户数据，确保后续处理可以使用
+      final customers = results[0] as List<Customer>;
+      setState(() {
+        _customers = customers;
+      });
+      
+      final salesResponse = results[1] as PaginatedResponse<Sale>;
+      final returnsResponse = results[2] as PaginatedResponse<Return>;
+      final incomesResponse = results[3] as PaginatedResponse<Income>;
       
       // 应用日期筛选
       String? startDate = _selectedDateRange?.start.toIso8601String().split('T')[0];
@@ -254,13 +251,7 @@ class _SalesIncomeAnalysisScreenState extends State<SalesIncomeAnalysisScreen> {
         _isLoading = false;
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('数据加载失败: ${e.toString()}'),
-            backgroundColor: Colors.red,
-            duration: Duration(seconds: 5),
-          ),
-        );
+        context.showErrorSnackBar('数据加载失败: ${e.toString()}');
       }
       print('销售进账分析数据加载错误: $e');
     }
@@ -371,53 +362,12 @@ class _SalesIncomeAnalysisScreenState extends State<SalesIncomeAnalysisScreen> {
 
     String csv = const ListToCsvConverter().convert(rows);
 
-    if (Platform.isMacOS || Platform.isWindows) {
-      String? selectedPath = await FilePicker.platform.saveFile(
-        dialogTitle: '保存销售进账分析报告',
-        fileName: 'sales_income_analysis.csv',
-        type: FileType.custom,
-        allowedExtensions: ['csv'],
-      );
-      
-      if (selectedPath != null) {
-        final file = File(selectedPath);
-        await file.writeAsString(csv);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('导出成功: $selectedPath')),
-        );
-      }
-      return;
-    }
-
-    String path;
-    if (Platform.isAndroid) {
-      if (await Permission.storage.request().isGranted) {
-        final directory = Directory('/storage/emulated/0/Download');
-        path = '${directory.path}/sales_income_analysis.csv';
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('存储权限被拒绝')),
-        );
-        return;
-      }
-    } else if (Platform.isIOS) {
-      final directory = await getApplicationDocumentsDirectory();
-      path = '${directory.path}/sales_income_analysis.csv';
-    } else {
-      final directory = await getApplicationDocumentsDirectory();
-      path = '${directory.path}/sales_income_analysis.csv';
-    }
-
-    final file = File(path);
-    await file.writeAsString(csv);
-
-    if (Platform.isIOS) {
-      await Share.shareFiles([file.path], text: '销售进账分析报告 CSV 文件');
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('导出成功: $path')),
-      );
-    }
+    // 使用统一的导出服务
+    await ExportService.showExportOptions(
+      context: context,
+      csvData: csv,
+      baseFileName: '销售进账分析',
+    );
   }
 
   @override
@@ -434,7 +384,7 @@ class _SalesIncomeAnalysisScreenState extends State<SalesIncomeAnalysisScreen> {
             onPressed: _fetchAnalysisData,
           ),
           IconButton(
-            icon: Icon(Icons.download),
+            icon: Icon(Icons.share),
             tooltip: '导出 CSV',
             onPressed: _exportToCSV,
           ),
