@@ -48,20 +48,45 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     '退货': 3,
   };
 
+  // 滚动控制器和指示器
+  ScrollController? _summaryScrollController;
+  double _summaryScrollPosition = 0.0;
+  double _summaryScrollMaxExtent = 0.0;
+
   // 汇总数据
-  double _purchaseQuantity = 0.0;
-  double _purchaseAmount = 0.0;
+  double _purchaseQuantity = 0.0; // 采购总量（所有采购记录数量的绝对值相加）
+  double _purchaseAmount = 0.0; // 采购总额（所有采购记录金额相加的负数）
   double _saleQuantity = 0.0;
   double _saleAmount = 0.0;
   double _returnQuantity = 0.0;
   double _returnAmount = 0.0;
   double _currentStock = 0.0;
+  double _totalChange = 0.0; // 总量变化
+  double _netProfit = 0.0; // 净利润
 
   @override
   void initState() {
     super.initState();
+    _summaryScrollController = ScrollController();
+    _summaryScrollController!.addListener(_onSummaryScroll);
     _loadSortPreference();
     _fetchData();
+  }
+
+  void _onSummaryScroll() {
+    if (_summaryScrollController != null && _summaryScrollController!.hasClients) {
+      setState(() {
+        _summaryScrollPosition = _summaryScrollController!.offset;
+        _summaryScrollMaxExtent = _summaryScrollController!.position.maxScrollExtent;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _summaryScrollController?.removeListener(_onSummaryScroll);
+    _summaryScrollController?.dispose();
+    super.dispose();
   }
 
   Future<void> _loadSortPreference() async {
@@ -271,7 +296,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           'partnerId': purchase.supplierId,
           'partnerName': supplier.name,
         'partnerType': 'supplier',
-          'totalPrice': purchase.totalPurchasePrice ?? 0.0,
+        'totalPrice': purchase.totalPurchasePrice ?? 0.0, // 正数代表采购，负数代表采购退货
           'note': purchase.note ?? '',
         'recordType': '采购',
         'valueSign': 1, // 正值
@@ -292,7 +317,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           'partnerId': sale.customerId,
           'partnerName': customer.name,
         'partnerType': 'customer',
-          'totalPrice': sale.totalSalePrice ?? 0.0,
+        'totalPrice': sale.totalSalePrice ?? 0.0, // 正数代表销售
           'note': sale.note ?? '',
         'recordType': '销售',
         'valueSign': -1, // 负值
@@ -313,7 +338,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           'partnerId': returnItem.customerId,
           'partnerName': customer.name,
         'partnerType': 'customer',
-          'totalPrice': returnItem.totalReturnPrice ?? 0.0,
+        'totalPrice': returnItem.totalReturnPrice ?? 0.0, // 正数代表退货
           'note': returnItem.note ?? '',
         'recordType': '退货',
         'valueSign': 1, // 正值
@@ -369,8 +394,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   }
 
   void _calculateSummary(List<Map<String, dynamic>> records) {
-    double purchaseQuantity = 0.0;
-    double purchaseAmount = 0.0;
+    double purchaseQuantity = 0.0; // 采购总量：所有采购记录数量相加（包括正数和负数）
+    double purchaseAmountSum = 0.0; // 采购金额总和（用于计算采购总额）
     double saleQuantity = 0.0;
     double saleAmount = 0.0;
     double returnQuantity = 0.0;
@@ -378,8 +403,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
 
     for (var record in records) {
       if (record['recordType'] == '采购') {
+        // 采购总量：数量直接相加（包括正数和负数）
         purchaseQuantity += (record['quantity'] as num).toDouble();
-        purchaseAmount += (record['totalPrice'] as num).toDouble();
+        // 采购金额：直接相加（后面会取负数）
+        purchaseAmountSum += (record['totalPrice'] as num).toDouble();
       } else if (record['recordType'] == '销售') {
         saleQuantity += (record['quantity'] as num).toDouble();
         saleAmount += (record['totalPrice'] as num).toDouble();
@@ -389,6 +416,17 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       }
     }
 
+    // 采购总额：金额相加后取负数（正数代表花出去的钱，用负号显示）
+    double purchaseAmount = -purchaseAmountSum;
+    // 总量变化：采购总量 + 销售总量（负数显示） + 退货总量（正数显示）
+    // 其中：采购总量 = purchaseQuantity（正负混合）、
+    //       销售总量显示为 -saleQuantity、
+    //       退货总量显示为 +returnQuantity
+    // 因此总量变化应为：purchaseQuantity - saleQuantity + returnQuantity
+    double totalChange = purchaseQuantity - saleQuantity + returnQuantity;
+    // 净利润：销售总额 - 采购总额（负数） - 退货总额 = 销售总额 + 采购总额 - 退货总额
+    double netProfit = saleAmount + purchaseAmount - returnAmount;
+
     setState(() {
       _purchaseQuantity = purchaseQuantity;
       _purchaseAmount = purchaseAmount;
@@ -396,6 +434,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       _saleAmount = saleAmount;
       _returnQuantity = returnQuantity;
       _returnAmount = returnAmount;
+      _totalChange = totalChange;
+      _netProfit = netProfit;
     });
   }
 
@@ -426,30 +466,50 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     csvData += '日期,类型,产品,数量,单位,交易方,金额,备注\n';
     
     for (var record in _filteredRecords) {
-      // 设置数量和金额的符号
-      String quantitySign = record['recordType'] == '销售' ? '-' : '+';
-      String priceSign = record['recordType'] == '销售' ? '+' : '-';
+      // 对于采购 / 退货记录，数量和金额需要特殊处理
+      String quantityText;
+      String amountText;
+
+      if (record['recordType'] == '采购') {
+        // 采购记录：数量直接显示，金额取负数
+        final quantity = (record['quantity'] as num).toDouble();
+        final amount = (record['totalPrice'] as num).toDouble();
+        quantityText = '${quantity >= 0 ? '+' : ''}${_formatNumber(quantity)}';
+        amountText = (-amount).toStringAsFixed(2);
+      } else if (record['recordType'] == '销售') {
+        // 销售记录：数量显示负号，金额显示正数
+        quantityText = '-${_formatNumber(record['quantity'])}';
+        amountText = (record['totalPrice'] as num).toDouble().toStringAsFixed(2);
+      } else {
+        // 退货记录：数量为正（显示+号），金额为负
+        final quantity = (record['quantity'] as num).toDouble();
+        final amount = (record['totalPrice'] as num).toDouble();
+        quantityText = '+${_formatNumber(quantity)}';
+        amountText = (-amount).toStringAsFixed(2);
+      }
       
-      csvData += '${record['date']},${record['recordType']},${record['productName']},$quantitySign${_formatNumber(record['quantity'])},${widget.product['unit']},${record['partnerName']},$priceSign${record['totalPrice']},${record['note'] ?? ''}\n';
+      csvData += '${record['date']},${record['recordType']},${record['productName']},$quantityText,${widget.product['unit']},${record['partnerName']},$amountText,${record['note'] ?? ''}\n';
     }
     
     // 添加汇总信息
-    csvData += '\n汇总信息,,,,,\n';
+    csvData += '\n汇总信息\n';
     csvData += '当前库存,${_formatNumber(_currentStock)},${widget.product['unit']}\n';
+    csvData += '总记录数,${_filteredRecords.length}\n';
     csvData += '采购总量,${_formatNumber(_purchaseQuantity)},${widget.product['unit']}\n';
     csvData += '销售总量,${_formatNumber(_saleQuantity)},${widget.product['unit']}\n';
     csvData += '退货总量,${_formatNumber(_returnQuantity)},${widget.product['unit']}\n';
-    csvData += '采购总额,-¥${_purchaseAmount.toStringAsFixed(2)}\n';
-    csvData += '销售总额,+¥${_saleAmount.toStringAsFixed(2)}\n';
-    csvData += '退货总额,-¥${_returnAmount.toStringAsFixed(2)}\n';
-    csvData += '净收益,¥${(_saleAmount - _purchaseAmount - _returnAmount).toStringAsFixed(2)}\n';
+    csvData += '总量变化,${_formatNumber(_totalChange)},${widget.product['unit']}\n';
+    csvData += '采购总额,${_purchaseAmount.toStringAsFixed(2)}\n';
+    csvData += '销售总额,${_saleAmount.toStringAsFixed(2)}\n';
+    csvData += '退货总额,${_returnAmount.toStringAsFixed(2)}\n';
+    csvData += '净利润,${_netProfit.toStringAsFixed(2)}\n';
 
-    // 使用统一的导出服务
+    // 使用统一的导出服务（时间戳由 ExportService 统一追加）
     await ExportService.showExportOptions(
       context: context,
       csvData: csvData,
-      baseFileName: '${widget.product['name']}_产品详情',
-    );
+      baseFileName: '${widget.product['name']}_库存记录',
+      );
   }
 
   @override
@@ -463,16 +523,17 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           )
         ),
         actions: [
+          // 时间排序按钮（放在前面）
+          IconButton(
+            icon: Icon(_isDescending ? Icons.arrow_downward : Icons.arrow_upward),
+            tooltip: '切换排序',
+            onPressed: _toggleSortOrder,
+          ),
           // 添加类型排序按钮
           IconButton(
             icon: Icon(Icons.swap_vert),
             tooltip: '设置交易类型排序',
             onPressed: _showTypeOrderDialog,
-          ),
-          IconButton(
-            icon: Icon(_isDescending ? Icons.arrow_downward : Icons.arrow_upward),
-            tooltip: '切换排序',
-            onPressed: _toggleSortOrder,
           ),
           IconButton(
             icon: Icon(Icons.share),
@@ -490,29 +551,43 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
             child: Row(
               children: [
-                Icon(Icons.list_alt, color: Colors.blue[700], size: 20),
+                CircleAvatar(
+                  backgroundColor: Colors.green[100],
+                  radius: 14,
+                  child: Text(
+                    widget.product['name'] != null && widget.product['name'].toString().isNotEmpty
+                        ? widget.product['name'].toString()[0].toUpperCase()
+                        : '?',
+                    style: TextStyle(
+                      color: Colors.green[800],
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
                 SizedBox(width: 8),
                 Text(
-                  '交易记录',
+                  '产品交易记录',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    color: Colors.blue[800],
+                    color: Colors.green[800],
                   ),
                 ),
                 Spacer(),
-                Text(
-                  '排序: ${_isDescending ? '最新在前' : '最早在前'}',
+                Container(
+                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[200],
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '共 ${_filteredRecords.length} 条记录',
                   style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey[600],
+                      fontSize: 12,
+                      color: Colors.grey[700],
                   ),
                 ),
-                SizedBox(width: 4),
-                Icon(
-                  _isDescending ? Icons.arrow_downward : Icons.arrow_upward,
-                  size: 14,
-                  color: Colors.grey[600],
                 ),
               ],
             ),
@@ -559,11 +634,11 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       data: Theme.of(context).copyWith(
                         dividerColor: Colors.grey[300],
                         dataTableTheme: DataTableThemeData(
-                          headingRowColor: MaterialStateProperty.all(Colors.blue[50]),
+                          headingRowColor: MaterialStateProperty.all(Colors.green[50]),
                           dataRowColor: MaterialStateProperty.resolveWith<Color>(
                             (Set<MaterialState> states) {
                               if (states.contains(MaterialState.selected))
-                                return Colors.blue[100]!;
+                                return Colors.green[100]!;
                               return states.contains(MaterialState.hovered)
                                   ? Colors.grey[100]!
                                   : Colors.white;
@@ -574,7 +649,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       child: DataTable(
                         headingTextStyle: TextStyle(
                           fontWeight: FontWeight.bold,
-                          color: Colors.blue[800],
+                          color: Colors.green[800],
                         ),
                         dataTextStyle: TextStyle(
                           color: Colors.black87,
@@ -604,9 +679,28 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                             typeColor = Colors.red;
                           }
                           
-                          // 设置数量和金额的符号
-                          String quantitySign = record['recordType'] == '销售' ? '-' : '+';
-                          String priceSign = record['recordType'] == '销售' ? '+' : '-';
+                          // 对于采购 / 退货记录，数量和金额需要特殊处理
+                          String quantityText;
+                          String amountText;
+
+                          if (record['recordType'] == '采购') {
+                            // 采购记录：数量直接显示，金额取负数
+                            final quantity = (record['quantity'] as num).toDouble();
+                            final amount = (record['totalPrice'] as num).toDouble();
+                            quantityText = '${quantity >= 0 ? '+' : ''}${_formatNumber(quantity)}';
+                            final negAmount = -amount;
+                            amountText = '${negAmount >= 0 ? '+' : '-'}¥${negAmount.abs().toStringAsFixed(2)}';
+                          } else if (record['recordType'] == '销售') {
+                            // 销售记录：数量显示负号，金额显示正号
+                            quantityText = '-${_formatNumber(record['quantity'])}';
+                            amountText = '+¥${(record['totalPrice'] as num).toDouble().toStringAsFixed(2)}';
+                          } else {
+                            // 退货记录：数量为正（显示+号），金额为负
+                            final quantity = (record['quantity'] as num).toDouble();
+                            final amount = (record['totalPrice'] as num).toDouble();
+                            quantityText = '+${_formatNumber(quantity)}';
+                            amountText = '-¥${amount.abs().toStringAsFixed(2)}';
+                          }
                           
                           return DataRow(
                             cells: [
@@ -634,7 +728,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                               ),
                               DataCell(
                                 Text(
-                                  '$quantitySign${_formatNumber(record['quantity'])}',
+                                  quantityText,
                                   style: TextStyle(
                                     color: typeColor,
                                     fontWeight: FontWeight.bold,
@@ -652,7 +746,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                               DataCell(Text(record['partnerName'])),
                               DataCell(
                                 Text(
-                                  '$priceSign¥${record['totalPrice']}',
+                                  amountText,
                                   style: TextStyle(
                                     color: typeColor,
                                     fontWeight: FontWeight.bold,
@@ -676,13 +770,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
 
   // 合并产品信息和汇总信息卡片
   Widget _buildCombinedInfoCard() {
-    // 计算毛利
-    double grossProfit = _saleAmount - _purchaseAmount - _returnAmount;
-    
     return Card(
       margin: EdgeInsets.all(8),
       elevation: 2,
-      color: Colors.blue[50],
+      color: Colors.green[50],
       child: Padding(
         padding: EdgeInsets.all(12),
         child: Column(
@@ -694,46 +785,23 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               children: [
                 // 产品信息
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  child: Row(
                     children: [
-                Row(
-                  children: [
-                    Icon(Icons.inventory_2, color: Colors.blue, size: 16),
+                      Icon(Icons.inventory_2, color: Colors.green, size: 16),
                     SizedBox(width: 8),
                           Flexible(
                             child: Text(
-                      '${widget.product['name']} (${widget.product['unit']})',
+                          _productSupplierName != null
+                              ? '${widget.product['name']} (${widget.product['unit']})    $_productSupplierName'
+                              : '${widget.product['name']} (${widget.product['unit']})',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
-                        color: Colors.blue[800],
+                            color: Colors.green[800],
                       ),
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                        ],
-                      ),
-                      // 显示供应商信息
-                      if (_productSupplierName != null) ...[
-                        SizedBox(height: 4),
-                        Row(
-                          children: [
-                            Icon(Icons.business, color: Colors.blue[600], size: 12),
-                            SizedBox(width: 4),
-                            Flexible(
-                              child: Text(
-                                '供应商: $_productSupplierName',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.blue[700],
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                    ),
-                  ],
                     ],
                   ),
                 ),
@@ -751,14 +819,14 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.bold,
-                          color: Colors.blue[800],
+                          color: Colors.green[800],
                         ),
                       ),
                       SizedBox(width: 4),
                       Icon(
-                        _isSummaryExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                        _isSummaryExpanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_up,
                         size: 16,
-                        color: Colors.blue[800],
+                        color: Colors.green[800],
                       ),
                     ],
                   ),
@@ -768,53 +836,95 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             if (_isSummaryExpanded) ...[
               Divider(height: 16, thickness: 1),
               
-              // 当前库存和记录数
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              // 单行显示，支持左右滑动
+              Builder(
+                builder: (context) {
+                  // 在布局完成后检查滚动状态
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (_summaryScrollController != null && _summaryScrollController!.hasClients) {
+                      final newMaxExtent = _summaryScrollController!.position.maxScrollExtent;
+                      final newPosition = _summaryScrollController!.offset;
+                      if (newMaxExtent != _summaryScrollMaxExtent || newPosition != _summaryScrollPosition) {
+                        setState(() {
+                          _summaryScrollPosition = newPosition;
+                          _summaryScrollMaxExtent = newMaxExtent;
+                        });
+                      }
+                    }
+                  });
+
+                  return SingleChildScrollView(
+                    controller: _summaryScrollController,
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
                 children: [
-                  _buildSummaryItem('当前库存', '${_formatNumber(_currentStock)} ${widget.product['unit']}', Colors.blue),
-                  _buildSummaryItem('记录总数', '${_filteredRecords.length}', Colors.purple),
-                ],
-              ),
-              SizedBox(height: 12),
-              
-              // 数量汇总 - 横向布局
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  _buildSummaryItem('采购总量', '+${_formatNumber(_purchaseQuantity)} ${widget.product['unit']}', Colors.blue),
+                        SizedBox(width: 8),
+                        _buildSummaryItem('当前库存', '${_formatNumber(_currentStock)} ${widget.product['unit']}', Colors.purple),
+                        SizedBox(width: 16),
+                        _buildSummaryItem('总记录数', '${_filteredRecords.length}', Colors.purple),
+                        SizedBox(width: 16),
+                        _buildSummaryItem('采购总量', '${_purchaseQuantity >= 0 ? '+' : ''}${_formatNumber(_purchaseQuantity)} ${widget.product['unit']}', Colors.blue),
+                        SizedBox(width: 16),
                   _buildSummaryItem('销售总量', '-${_formatNumber(_saleQuantity)} ${widget.product['unit']}', Colors.green),
+                        SizedBox(width: 16),
                   _buildSummaryItem('退货总量', '+${_formatNumber(_returnQuantity)} ${widget.product['unit']}', Colors.red),
-                ],
-              ),
-              SizedBox(height: 12),
-              
-              // 金额汇总 - 横向布局
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  _buildSummaryItem('采购总额', '-¥${_purchaseAmount.toStringAsFixed(2)}', Colors.blue),
+                        SizedBox(width: 16),
+                        _buildSummaryItem('总量变化', '${_totalChange >= 0 ? '+' : ''}${_formatNumber(_totalChange)} ${widget.product['unit']}', _totalChange >= 0 ? Colors.green : Colors.red),
+                        SizedBox(width: 16),
+                        _buildSummaryItem('采购总额', '${_purchaseAmount >= 0 ? '+' : '-'}¥${_purchaseAmount.abs().toStringAsFixed(2)}', Colors.blue),
+                        SizedBox(width: 16),
                   _buildSummaryItem('销售总额', '+¥${_saleAmount.toStringAsFixed(2)}', Colors.green),
+                        SizedBox(width: 16),
                   _buildSummaryItem('退货总额', '-¥${_returnAmount.toStringAsFixed(2)}', Colors.red),
-                ],
+                        SizedBox(width: 16),
+                        _buildSummaryItem('净利润', '${_netProfit >= 0 ? '+' : '-'}¥${_netProfit.abs().toStringAsFixed(2)}', _netProfit >= 0 ? Colors.green : Colors.red),
+                        SizedBox(width: 8),
+                      ],
+                    ),
+                  );
+                },
               ),
-              
-              Divider(height: 16, thickness: 1),
-              
-              // 净收益
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+
+              // 滚动指示器
+              SizedBox(height: 8),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final containerWidth = constraints.maxWidth - 24;
+                  // 计算可见区域比例和滚动位置
+                  final visibleRatio = _summaryScrollMaxExtent > 0 
+                      ? containerWidth / (_summaryScrollMaxExtent + containerWidth)
+                      : 0.0; // 如果内容不能滚动，不显示彩色条
+                  final scrollRatio = _summaryScrollMaxExtent > 0 ? _summaryScrollPosition / _summaryScrollMaxExtent : 0.0;
+                  final indicatorLeft = _summaryScrollMaxExtent > 0
+                      ? scrollRatio * (containerWidth - containerWidth * visibleRatio)
+                      : 0.0;
+
+                  return Container(
+                    height: 4,
+                    margin: EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(2),
+                      color: Colors.grey[300],
+                    ),
+                    child: Stack(
                 children: [
-                  Text('净收益: ', style: TextStyle(fontWeight: FontWeight.bold)),
-                  Text(
-                    '${grossProfit >= 0 ? '+' : ''}¥${grossProfit.toStringAsFixed(2)}',
-                    style: TextStyle(
-                      color: grossProfit >= 0 ? Colors.green : Colors.red,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
+                        // 进度条（显示可见区域）- 只在内容可滚动时显示
+                        if (_summaryScrollMaxExtent > 0)
+                          Positioned(
+                            left: indicatorLeft.clamp(0.0, containerWidth - containerWidth * visibleRatio),
+                            child: Container(
+                              width: containerWidth * visibleRatio,
+                              height: 4,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(2),
+                                color: Colors.green[700],
+                              ),
                     ),
                   ),
                 ],
+                    ),
+                  );
+                },
               ),
             ],
           ],
@@ -834,6 +944,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             color: Colors.grey[700],
           ),
         ),
+        SizedBox(height: 6),
         Text(
           value,
           style: TextStyle(

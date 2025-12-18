@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../repositories/purchase_repository.dart';
 import '../repositories/remittance_repository.dart';
 import '../repositories/employee_repository.dart';
+import '../repositories/product_repository.dart';
 import '../models/api_error.dart';
 import '../models/api_response.dart';
 import '../utils/snackbar_helper.dart';
@@ -25,6 +26,7 @@ class _SupplierTransactionsScreenState extends State<SupplierTransactionsScreen>
   final PurchaseRepository _purchaseRepo = PurchaseRepository();
   final RemittanceRepository _remittanceRepo = RemittanceRepository();
   final EmployeeRepository _employeeRepo = EmployeeRepository();
+  final ProductRepository _productRepo = ProductRepository();
   
   List<Map<String, dynamic>> _transactions = [];
   List<Map<String, dynamic>> _filteredTransactions = [];
@@ -70,11 +72,14 @@ class _SupplierTransactionsScreenState extends State<SupplierTransactionsScreen>
         _purchaseRepo.getPurchases(page: 1, pageSize: 10000),
         _remittanceRepo.getRemittances(page: 1, pageSize: 10000),
         _employeeRepo.getAllEmployees(),
+        _productRepo.getProducts(page: 1, pageSize: 10000),
       ]);
       
       final purchasesResponse = results[0] as PaginatedResponse<Purchase>;
       final remittancesResponse = results[1] as PaginatedResponse<Remittance>;
       final employees = results[2] as List<Employee>;
+      final productsResponse = results[3] as PaginatedResponse<Product>;
+      final products = productsResponse.items;
       
       // 按供应商ID筛选
       final purchases = purchasesResponse.items.where((p) => p.supplierId == widget.supplierId).toList();
@@ -84,19 +89,31 @@ class _SupplierTransactionsScreenState extends State<SupplierTransactionsScreen>
 
       // 处理采购记录
       for (var purchase in purchases) {
-        double amount = purchase.totalPurchasePrice ?? 0.0;
-        bool isReturn = amount < 0;
+        final quantity = purchase.quantity;
+        bool isReturn = quantity < 0;
+        final product = products.firstWhere(
+          (p) => p.name == purchase.productName,
+          orElse: () => Product(
+            id: -1,
+            userId: -1,
+            name: '',
+            stock: 0,
+            unit: ProductUnit.kilogram,
+            version: 1,
+          ),
+        );
         
         allTransactions.add({
           'type': isReturn ? 'return' : 'purchase',
           'typeName': isReturn ? '退货' : '采购',
           'date': purchase.purchaseDate ?? '',
           'productName': purchase.productName,
-          'quantity': purchase.quantity,
-          'amount': amount,
+          'quantity': quantity.abs(), // 存储绝对值，因为已经有类型标识了
+          'unit': product.unit.value,
+          'amount': (purchase.totalPurchasePrice ?? 0.0).abs(), // 存储绝对值
           'note': purchase.note ?? '',
           'icon': isReturn ? Icons.undo : Icons.shopping_cart,
-          'color': isReturn ? Colors.orange : Colors.green,
+          'color': isReturn ? Colors.red : Colors.green, // 退货改为红色
         });
       }
 
@@ -270,7 +287,7 @@ class _SupplierTransactionsScreenState extends State<SupplierTransactionsScreen>
                     children: [
                       _buildFilterChip('all', '全部', null, setModalState),
                       _buildFilterChip('purchase', '采购', Colors.green, setModalState),
-                      _buildFilterChip('return', '退货', Colors.orange, setModalState),
+                      _buildFilterChip('return', '退货', Colors.red, setModalState),
                       _buildFilterChip('remittance', '汇款', Colors.blue, setModalState),
                     ],
                   ),
@@ -571,6 +588,47 @@ class _SupplierTransactionsScreenState extends State<SupplierTransactionsScreen>
     return value.toStringAsFixed(2);
   }
 
+  // 格式化数字显示：整数显示为整数，小数显示为小数
+  String _formatNumber(dynamic number) {
+    if (number == null) return '0';
+    double value = number is double ? number : double.tryParse(number.toString()) ?? 0.0;
+    if (value == value.floor()) {
+      return value.toInt().toString();
+    } else {
+      return value.toString();
+    }
+  }
+
+  Widget _buildDetailRow(String label, String value) {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 80,
+            child: Text(
+              '$label:',
+              style: TextStyle(
+                color: Colors.grey[600],
+                fontSize: 14,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
@@ -580,7 +638,7 @@ class _SupplierTransactionsScreenState extends State<SupplierTransactionsScreen>
       child: Scaffold(
         appBar: AppBar(
           title: Text(
-            '${widget.supplierName} - 往来记录',
+            '${widget.supplierName}的往来记录',
             style: TextStyle(
               fontWeight: FontWeight.bold,
               color: Colors.white,
@@ -692,7 +750,7 @@ class _SupplierTransactionsScreenState extends State<SupplierTransactionsScreen>
                         _applyFiltersAndSort();
                       },
                       child: Text(
-                        '清除',
+                        '清除筛选',
                         style: TextStyle(color: Colors.blue[700], fontSize: 12),
                       ),
                       style: TextButton.styleFrom(
@@ -713,24 +771,44 @@ class _SupplierTransactionsScreenState extends State<SupplierTransactionsScreen>
                       ),
                     )
                   : _filteredTransactions.isEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.receipt_long, size: 64, color: Colors.grey[400]),
-                              SizedBox(height: 16),
-                              Text(
-                                '暂无往来记录',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  color: Colors.grey[600],
-                                ),
+                      ? SingleChildScrollView(
+                          child: Center(
+                            child: Padding(
+                              padding: const EdgeInsets.all(16.0),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.receipt_long, size: 64, color: Colors.grey[400]),
+                                  SizedBox(height: 16),
+                                  Text(
+                                    _transactions.isEmpty ? '暂无往来记录' : '没有符合条件的记录',
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      color: Colors.grey[600],
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                  if (_transactions.isNotEmpty && _filteredTransactions.isEmpty)
+                                    Padding(
+                                      padding: EdgeInsets.only(top: 8),
+                                      child: Text(
+                                        '请尝试调整搜索或筛选条件',
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          color: Colors.grey[500],
+                                        ),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    ),
+                                ],
                               ),
-                            ],
+                            ),
                           ),
                         )
                       : ListView.builder(
                           padding: EdgeInsets.symmetric(horizontal: 16),
+                          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
                           itemCount: _filteredTransactions.length,
                           itemBuilder: (context, index) {
                             final transaction = _filteredTransactions[index];
@@ -776,7 +854,7 @@ class _SupplierTransactionsScreenState extends State<SupplierTransactionsScreen>
                                                   ),
                                                   Spacer(),
                                                   Text(
-                                                    transaction['date'] ?? '',
+                                                    _formatDate(transaction['date']),
                                                     style: TextStyle(
                                                       fontSize: 14,
                                                       color: Colors.grey[600],
@@ -786,12 +864,11 @@ class _SupplierTransactionsScreenState extends State<SupplierTransactionsScreen>
                                               ),
                                               SizedBox(height: 4),
                                               Text(
-                                                '¥${transaction['amount'] ?? '0.00'}',
+                                                '¥${_formatAmount(transaction['amount'])}',
                                                 style: TextStyle(
                                                   fontSize: 18,
                                                   fontWeight: FontWeight.bold,
-                                                  color: transaction['type'] == 'return' ? Colors.red : 
-                                                         transaction['type'] == 'purchase' ? Colors.red : Colors.green,
+                                                  color: transaction['color'],
                                                 ),
                                               ),
                                             ],
@@ -799,26 +876,38 @@ class _SupplierTransactionsScreenState extends State<SupplierTransactionsScreen>
                                         ),
                                       ],
                                     ),
-                                    if (transaction['productName'] != null || transaction['note'] != null)
-                                      Padding(
-                                        padding: EdgeInsets.only(top: 12),
-                                        child: Container(
-                                          padding: EdgeInsets.all(12),
-                                          decoration: BoxDecoration(
-                                            color: Colors.grey[50],
-                                            borderRadius: BorderRadius.circular(8),
-                                          ),
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              if (transaction['productName'] != null)
-                                                Text('产品: ${transaction['productName']}'),
-                                              if (transaction['note'] != null && transaction['note'].isNotEmpty)
-                                                Text('备注: ${transaction['note']}'),
-                                            ],
-                                          ),
-                                        ),
+                                    // 详细信息
+                                    SizedBox(height: 12),
+                                    Container(
+                                      padding: EdgeInsets.all(12),
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey[50],
+                                        borderRadius: BorderRadius.circular(8),
                                       ),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          // 产品信息（采购和退货）
+                                          if (transaction['productName'] != null)
+                                            _buildDetailRow('产品', transaction['productName']),
+                                          
+                                          if (transaction['quantity'] != null)
+                                            _buildDetailRow('数量', '${_formatNumber(transaction['quantity'])} ${transaction['unit'] ?? ''}'),
+                                          
+                                          // 支付方式（汇款）
+                                          if (transaction['paymentMethod'] != null)
+                                            _buildDetailRow('支付方式', transaction['paymentMethod']),
+                                          
+                                          // 员工信息（汇款）
+                                          if (transaction['employeeName'] != null && transaction['employeeName'].isNotEmpty)
+                                            _buildDetailRow('经手员工', transaction['employeeName']),
+                                          
+                                          // 备注
+                                          if (transaction['note'] != null && transaction['note'].toString().isNotEmpty)
+                                            _buildDetailRow('备注', transaction['note']),
+                                        ],
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ),

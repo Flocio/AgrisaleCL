@@ -44,6 +44,11 @@ class _EmployeeRecordsScreenState extends State<EmployeeRecordsScreen> {
   // 添加日期筛选相关变量
   DateTimeRange? _selectedDateRange;
   
+  // 滚动控制器和指示器
+  ScrollController? _summaryScrollController;
+  double _summaryScrollPosition = 0.0;
+  double _summaryScrollMaxExtent = 0.0;
+  
   // 汇总数据
   double _totalIncomeAmount = 0.0;
   double _totalRemittanceAmount = 0.0;
@@ -51,19 +56,28 @@ class _EmployeeRecordsScreenState extends State<EmployeeRecordsScreen> {
   double _netAmount = 0.0;
   int _incomeCount = 0;
   int _remittanceCount = 0;
-  
-  // 滚动控制器
-  final ScrollController _summaryScrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
+    _summaryScrollController = ScrollController();
+    _summaryScrollController!.addListener(_onSummaryScroll);
     _fetchRecords();
   }
-  
+
+  void _onSummaryScroll() {
+    if (_summaryScrollController != null && _summaryScrollController!.hasClients) {
+      setState(() {
+        _summaryScrollPosition = _summaryScrollController!.offset;
+        _summaryScrollMaxExtent = _summaryScrollController!.position.maxScrollExtent;
+      });
+    }
+  }
+
   @override
   void dispose() {
-    _summaryScrollController.dispose();
+    _summaryScrollController?.removeListener(_onSummaryScroll);
+    _summaryScrollController?.dispose();
     super.dispose();
   }
 
@@ -292,7 +306,7 @@ class _EmployeeRecordsScreenState extends State<EmployeeRecordsScreen> {
     String baseFileName;
     if (_selectedType != null && _selectedType != '所有类型') {
       baseFileName = '${widget.employeeName}_${_selectedType}_业务记录';
-    } else {
+      } else {
       baseFileName = '${widget.employeeName}_业务记录';
     }
 
@@ -301,7 +315,7 @@ class _EmployeeRecordsScreenState extends State<EmployeeRecordsScreen> {
       context: context,
       csvData: csv,
       baseFileName: baseFileName,
-    );
+      );
   }
 
   void _toggleSortOrder() {
@@ -351,56 +365,56 @@ class _EmployeeRecordsScreenState extends State<EmployeeRecordsScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             color: Colors.purple[50],
             child: Row(
-              children: [
-                // 类型筛选
-                Icon(Icons.filter_alt, color: Colors.purple[700], size: 20),
-                SizedBox(width: 8),
-                Expanded(
-                  flex: 1,
-                  child: DropdownButtonHideUnderline(
-                    child: Container(
-                      padding: EdgeInsets.symmetric(horizontal: 12),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.purple[300]!),
-                        color: Colors.white,
-                      ),
-                      child: DropdownButton<String>(
-                        hint: Text('选择类型', style: TextStyle(color: Colors.black87)),
-                        value: _selectedType,
-                        isExpanded: true,
-                        icon: Icon(Icons.arrow_drop_down, color: Colors.purple[700]),
-                        onChanged: (String? newValue) {
-                          setState(() {
-                            _selectedType = newValue;
-                            _fetchRecords();
-                          });
-                        },
-                        style: TextStyle(color: Colors.black87, fontSize: 14),
-                        items: [
-                          DropdownMenuItem<String>(
-                            value: '所有类型',
-                            child: Text('所有类型'),
+                  children: [
+                    // 类型筛选
+                    Icon(Icons.filter_alt, color: Colors.purple[700], size: 20),
+                    SizedBox(width: 8),
+                    Expanded(
+                      flex: 1,
+                      child: DropdownButtonHideUnderline(
+                        child: Container(
+                          padding: EdgeInsets.symmetric(horizontal: 12),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.purple[300]!),
+                            color: Colors.white,
                           ),
-                          DropdownMenuItem<String>(
-                            value: '进账',
-                            child: Text('进账'),
+                          child: DropdownButton<String>(
+                            hint: Text('选择类型', style: TextStyle(color: Colors.black87)),
+                            value: _selectedType,
+                            isExpanded: true,
+                            icon: Icon(Icons.arrow_drop_down, color: Colors.purple[700]),
+                            onChanged: (String? newValue) {
+                              setState(() {
+                                _selectedType = newValue;
+                                _fetchRecords();
+                              });
+                            },
+                            style: TextStyle(color: Colors.black87, fontSize: 14),
+                            items: [
+                              DropdownMenuItem<String>(
+                                value: '所有类型',
+                                child: Text('所有类型'),
+                              ),
+                              DropdownMenuItem<String>(
+                                value: '进账',
+                                child: Text('进账'),
+                              ),
+                              DropdownMenuItem<String>(
+                                value: '汇款',
+                                child: Text('汇款'),
+                              ),
+                            ],
                           ),
-                          DropdownMenuItem<String>(
-                            value: '汇款',
-                            child: Text('汇款'),
-                          ),
-                        ],
+                        ),
                       ),
                     ),
-                  ),
-                ),
-                SizedBox(width: 12),
+                    SizedBox(width: 12),
                 // 日期范围选择器
-                Icon(Icons.date_range, color: Colors.purple[700], size: 20),
-                SizedBox(width: 8),
-                Expanded(
-                  flex: 1,
+                    Icon(Icons.date_range, color: Colors.purple[700], size: 20),
+                    SizedBox(width: 8),
+                    Expanded(
+                      flex: 1,
                   child: InkWell(
                     onTap: () async {
                       final now = DateTime.now();
@@ -463,14 +477,14 @@ class _EmployeeRecordsScreenState extends State<EmployeeRecordsScreen> {
                               child: Padding(
                                 padding: EdgeInsets.only(right: 8),
                                 child: Icon(Icons.clear, color: Colors.purple[700], size: 18),
-                              ),
                             ),
+                          ),
                           Icon(Icons.arrow_drop_down, color: Colors.purple[700]),
                         ],
                       ),
+                      ),
                     ),
                   ),
-                ),
               ],
             ),
           ),
@@ -746,7 +760,7 @@ class _EmployeeRecordsScreenState extends State<EmployeeRecordsScreen> {
                                   DataCell(Text('')), // 客户/供应商列
                                   DataCell(
                                     Text(
-                                      '${_netAmount >= 0 ? '+' : ''}¥${_netAmount.toStringAsFixed(2)}',
+                                      '${_netAmount >= 0 ? '+' : '-'}¥${_netAmount.abs().toStringAsFixed(2)}',
                                       style: TextStyle(
                                         color: _netAmount >= 0 ? Colors.green : Colors.red,
                                         fontWeight: FontWeight.bold,
@@ -841,35 +855,92 @@ class _EmployeeRecordsScreenState extends State<EmployeeRecordsScreen> {
             if (_isSummaryExpanded) ...[
               Divider(height: 16, thickness: 1),
               
-              // 单行横向滚动显示所有汇总信息
-              SingleChildScrollView(
-                controller: _summaryScrollController,
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    SizedBox(width: 8),
-                    _buildSummaryItem('业务记录数', '${_records.length}', Colors.blue),
-                    SizedBox(width: 16),
-                    _buildSummaryItem('进账记录数', '${_incomeCount}', Colors.green),
-                    SizedBox(width: 16),
-                    _buildSummaryItem('汇款记录数', '${_remittanceCount}', Colors.red),
-                    SizedBox(width: 16),
-                    _buildSummaryItem('进账总额', '+¥${_totalIncomeAmount.toStringAsFixed(2)}', Colors.green),
-                    SizedBox(width: 16),
-                    _buildSummaryItem('汇款总额', '-¥${_totalRemittanceAmount.toStringAsFixed(2)}', Colors.red),
-                    SizedBox(width: 16),
-                    _buildSummaryItem('净收入', '${_netAmount >= 0 ? '+' : ''}¥${_netAmount.toStringAsFixed(2)}', _netAmount >= 0 ? Colors.green : Colors.red),
-                    SizedBox(width: 16),
-                    _buildSummaryItem('平均进账', _incomeCount > 0 ? '¥${(_totalIncomeAmount / _incomeCount).toStringAsFixed(2)}' : '¥0.00', Colors.green),
-                    SizedBox(width: 16),
-                    _buildSummaryItem('平均汇款', _remittanceCount > 0 ? '¥${(_totalRemittanceAmount / _remittanceCount).toStringAsFixed(2)}' : '¥0.00', Colors.red),
-                    SizedBox(width: 8),
+              // 单行显示，支持左右滑动
+              Builder(
+                builder: (context) {
+                  // 在布局完成后检查滚动状态
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (_summaryScrollController != null && _summaryScrollController!.hasClients) {
+                      final newMaxExtent = _summaryScrollController!.position.maxScrollExtent;
+                      final newPosition = _summaryScrollController!.offset;
+                      if (newMaxExtent != _summaryScrollMaxExtent || newPosition != _summaryScrollPosition) {
+                        setState(() {
+                          _summaryScrollPosition = newPosition;
+                          _summaryScrollMaxExtent = newMaxExtent;
+                        });
+                      }
+                    }
+                  });
+                  
+                  return SingleChildScrollView(
+                    controller: _summaryScrollController,
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                children: [
+                        SizedBox(width: 8),
+                        _buildSummaryItem('业务记录数', '${_records.length}', Colors.blue),
+                        SizedBox(width: 16),
+                  _buildSummaryItem('进账记录数', '${_incomeCount}', Colors.green),
+                        SizedBox(width: 16),
+                  _buildSummaryItem('汇款记录数', '${_remittanceCount}', Colors.red),
+                        SizedBox(width: 16),
+                  _buildSummaryItem('进账总额', '+¥${_totalIncomeAmount.toStringAsFixed(2)}', Colors.green),
+                        SizedBox(width: 16),
+                  _buildSummaryItem('汇款总额', '-¥${_totalRemittanceAmount.toStringAsFixed(2)}', Colors.red),
+                        SizedBox(width: 16),
+                        _buildSummaryItem('净收入', '${_netAmount >= 0 ? '+' : '-'}¥${_netAmount.abs().toStringAsFixed(2)}', _netAmount >= 0 ? Colors.green : Colors.red),
+                        SizedBox(width: 16),
+                        _buildSummaryItem('平均进账', _incomeCount > 0 ? '¥${(_totalIncomeAmount / _incomeCount).toStringAsFixed(2)}' : '¥0.00', Colors.green),
+                        SizedBox(width: 16),
+                        _buildSummaryItem('平均汇款', _remittanceCount > 0 ? '¥${(_totalRemittanceAmount / _remittanceCount).toStringAsFixed(2)}' : '¥0.00', Colors.red),
+                        SizedBox(width: 8),
                   ],
                 ),
+                  );
+                },
               ),
               
-              // 滚动位置指示器
-              _buildScrollIndicator(),
+              // 滚动指示器
+              SizedBox(height: 8),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final containerWidth = constraints.maxWidth - 24;
+                  // 计算可见区域比例和滚动位置
+                  final visibleRatio = _summaryScrollMaxExtent > 0 
+                      ? containerWidth / (_summaryScrollMaxExtent + containerWidth)
+                      : 0.0; // 如果内容不能滚动，不显示彩色条
+                  final scrollRatio = _summaryScrollMaxExtent > 0 ? _summaryScrollPosition / _summaryScrollMaxExtent : 0.0;
+                  final indicatorLeft = _summaryScrollMaxExtent > 0
+                      ? scrollRatio * (containerWidth - containerWidth * visibleRatio)
+                      : 0.0;
+                  
+                  return Container(
+                    height: 4,
+                    margin: EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(2),
+                      color: Colors.grey[300],
+                    ),
+                    child: Stack(
+                  children: [
+                        // 进度条（显示可见区域）- 只在内容可滚动时显示
+                        if (_summaryScrollMaxExtent > 0)
+                          Positioned(
+                            left: indicatorLeft.clamp(0.0, containerWidth - containerWidth * visibleRatio),
+                            child: Container(
+                              width: containerWidth * visibleRatio,
+                              height: 4,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(2),
+                                color: Colors.purple[700],
+                              ),
+                            ),
+                ),
+              ],
+                    ),
+                  );
+                },
+              ),
             ],
           ],
         ),
@@ -888,7 +959,7 @@ class _EmployeeRecordsScreenState extends State<EmployeeRecordsScreen> {
             color: Colors.grey[700],
           ),
         ),
-        SizedBox(height: 6), // 增加名称和数字之间的距离
+        SizedBox(height: 6),
         Text(
           value,
           style: TextStyle(
@@ -898,54 +969,6 @@ class _EmployeeRecordsScreenState extends State<EmployeeRecordsScreen> {
           ),
         ),
       ],
-    );
-  }
-  
-  // 滚动位置指示器
-  Widget _buildScrollIndicator() {
-    return AnimatedBuilder(
-      animation: _summaryScrollController,
-      builder: (context, child) {
-        if (!_summaryScrollController.hasClients) {
-          return SizedBox(height: 4);
-        }
-        
-        final position = _summaryScrollController.position;
-        if (position == null || position.maxScrollExtent == 0) {
-          return SizedBox(height: 4);
-        }
-        
-        final scrollRatio = position.pixels / position.maxScrollExtent;
-        final indicatorWidth = MediaQuery.of(context).size.width - 32; // 减去卡片左右边距
-        final thumbWidth = 40.0;
-        final maxLeft = indicatorWidth - thumbWidth;
-        final thumbLeft = scrollRatio * maxLeft;
-        
-        return Container(
-          margin: EdgeInsets.only(top: 8),
-          height: 4,
-          width: indicatorWidth,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(2),
-            color: Colors.grey[300],
-          ),
-          child: Stack(
-            children: [
-              Positioned(
-                left: thumbLeft,
-                child: Container(
-                  width: thumbWidth,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(2),
-                    color: Colors.purple[700],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
     );
   }
 } 

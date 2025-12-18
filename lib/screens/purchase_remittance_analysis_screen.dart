@@ -39,11 +39,56 @@ class _PurchaseRemittanceAnalysisScreenState extends State<PurchaseRemittanceAna
   double _totalPurchases = 0.0;
   double _totalRemittances = 0.0;
   double _totalDifference = 0.0;
+  
+  // 汇总统计卡片是否展开（默认展开）
+  bool _isSummaryExpanded = true;
+  
+  // 表头固定：水平滚动同步（保持原 DataTable 风格）
+  final ScrollController _headerHorizontalScrollController = ScrollController();
+  final ScrollController _dataHorizontalScrollController = ScrollController();
+  bool _isSyncingFromHeader = false;
+  bool _isSyncingFromData = false;
 
   @override
   void initState() {
     super.initState();
     _loadInitialData();
+    
+    _headerHorizontalScrollController.addListener(_onHeaderHorizontalScroll);
+    _dataHorizontalScrollController.addListener(_onDataHorizontalScroll);
+  }
+  
+  void _onHeaderHorizontalScroll() {
+    if (_isSyncingFromData) return;
+    if (!_dataHorizontalScrollController.hasClients) return;
+    _isSyncingFromHeader = true;
+    final max = _dataHorizontalScrollController.position.maxScrollExtent;
+    final target = _headerHorizontalScrollController.offset.clamp(0.0, max);
+    if (_dataHorizontalScrollController.offset != target) {
+      _dataHorizontalScrollController.jumpTo(target);
+    }
+    _isSyncingFromHeader = false;
+  }
+  
+  void _onDataHorizontalScroll() {
+    if (_isSyncingFromHeader) return;
+    if (!_headerHorizontalScrollController.hasClients) return;
+    _isSyncingFromData = true;
+    final max = _headerHorizontalScrollController.position.maxScrollExtent;
+    final target = _dataHorizontalScrollController.offset.clamp(0.0, max);
+    if (_headerHorizontalScrollController.offset != target) {
+      _headerHorizontalScrollController.jumpTo(target);
+    }
+    _isSyncingFromData = false;
+  }
+  
+  @override
+  void dispose() {
+    _headerHorizontalScrollController.removeListener(_onHeaderHorizontalScroll);
+    _dataHorizontalScrollController.removeListener(_onDataHorizontalScroll);
+    _headerHorizontalScrollController.dispose();
+    _dataHorizontalScrollController.dispose();
+    super.dispose();
   }
 
   /// 首次加载时先获取供应商列表，再加载分析数据，避免供应商名称缺失显示为“未指定供应商”
@@ -312,11 +357,17 @@ class _PurchaseRemittanceAnalysisScreenState extends State<PurchaseRemittanceAna
 
     String csv = const ListToCsvConverter().convert(rows);
 
+    // 导出文件名：默认“采购与汇款统计”，如筛选供应商则“{供应商名}_采购与汇款统计”
+    String baseFileName = '采购与汇款统计';
+    if (_selectedSupplier != null && _selectedSupplier != '所有供应商') {
+      baseFileName = '${_selectedSupplier}_采购与汇款统计';
+    }
+
     // 使用统一的导出服务
     await ExportService.showExportOptions(
       context: context,
       csvData: csv,
-      baseFileName: '采购汇款分析',
+      baseFileName: baseFileName,
     );
   }
 
@@ -584,23 +635,42 @@ class _PurchaseRemittanceAnalysisScreenState extends State<PurchaseRemittanceAna
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              '汇总统计',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Colors.blue[800],
-              ),
-            ),
-            Divider(),
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                _buildSummaryItem('净采购额', '¥${_totalPurchases.toStringAsFixed(2)}', Colors.blue),
-                _buildSummaryItem('实际汇款', '¥${_totalRemittances.toStringAsFixed(2)}', Colors.orange),
-                _buildSummaryItem('差异', '¥${_totalDifference.toStringAsFixed(2)}', _totalDifference >= 0 ? Colors.red : Colors.green),
+                Text(
+                  '汇总统计',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blue[800],
+                  ),
+                ),
+                InkWell(
+                  onTap: () {
+                    setState(() {
+                      _isSummaryExpanded = !_isSummaryExpanded;
+                    });
+                  },
+                  child: Icon(
+                    _isSummaryExpanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_up,
+                    size: 20,
+                    color: Colors.blue[800],
+                  ),
+                ),
               ],
             ),
+            if (_isSummaryExpanded) ...[
+              Divider(),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _buildSummaryItem('净采购额', _formatMoney(_totalPurchases), Colors.blue),
+                  _buildSummaryItem('实际汇款', _formatMoney(_totalRemittances), Colors.orange),
+                  _buildSummaryItem('差异', _formatMoney(_totalDifference), _totalDifference >= 0 ? Colors.red : Colors.green),
+                ],
+              ),
+            ],
           ],
         ),
       ),
@@ -630,87 +700,161 @@ class _PurchaseRemittanceAnalysisScreenState extends State<PurchaseRemittanceAna
     );
   }
 
+  // 负数金额显示为 -¥123.45，正数保持 ¥123.45
+  String _formatMoney(double value) {
+    final absText = value.abs().toStringAsFixed(2);
+    return value < 0 ? '-¥$absText' : '¥$absText';
+  }
+
   Widget _buildDataTable() {
-    return SingleChildScrollView(
-      scrollDirection: Axis.vertical,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: DataTable(
-          sortColumnIndex: _getSortColumnIndex(),
-          sortAscending: !_isDescending,
-          horizontalMargin: 12,
-          columnSpacing: 16,
-          headingTextStyle: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: Colors.blue[800],
-            fontSize: 12,
-          ),
-          dataTextStyle: TextStyle(fontSize: 11),
-          columns: [
-            DataColumn(
-              label: Text('日期'),
-              onSort: (columnIndex, ascending) => _onSort('date'),
-            ),
-            DataColumn(
-              label: Text('供应商'),
-              onSort: (columnIndex, ascending) => _onSort('supplierName'),
-            ),
-            DataColumn(
-              label: Text('净采购额'),
-              numeric: true,
-              onSort: (columnIndex, ascending) => _onSort('totalPurchases'),
-            ),
-            DataColumn(
-              label: Text('实际汇款'),
-              numeric: true,
-              onSort: (columnIndex, ascending) => _onSort('totalRemittances'),
-            ),
-            DataColumn(
-              label: Text('差异'),
-              numeric: true,
-              onSort: (columnIndex, ascending) => _onSort('difference'),
-            ),
+    final columns = <DataColumn>[
+      DataColumn(
+        label: Text('日期'),
+        onSort: (columnIndex, ascending) => _onSort('date'),
+      ),
+      DataColumn(
+        label: Text('供应商'),
+        onSort: (columnIndex, ascending) => _onSort('supplierName'),
+      ),
+      DataColumn(
+        label: Text('净采购额'),
+        numeric: true,
+        onSort: (columnIndex, ascending) => _onSort('totalPurchases'),
+      ),
+      DataColumn(
+        label: Text('实际汇款'),
+        numeric: true,
+        onSort: (columnIndex, ascending) => _onSort('totalRemittances'),
+      ),
+      DataColumn(
+        label: Text('差异'),
+        numeric: true,
+        onSort: (columnIndex, ascending) => _onSort('difference'),
+      ),
+    ];
+
+    // 撑列宽隐形行（保证表头与数据列宽一致）
+    String maxDate = '';
+    String maxSupplier = '';
+    String maxPurchases = _formatMoney(0);
+    String maxRemittances = _formatMoney(0);
+    String maxDiff = _formatMoney(0);
+
+    for (final item in _analysisData) {
+      final String date = (item['date'] ?? '').toString();
+      final String supplier = (item['supplierName'] ?? '').toString();
+      final String purchases = _formatMoney((item['totalPurchases'] as num).toDouble());
+      final String remittances = _formatMoney((item['totalRemittances'] as num).toDouble());
+      final String diff = _formatMoney((item['difference'] as num).toDouble());
+
+      if (date.length > maxDate.length) maxDate = date;
+      if (supplier.length > maxSupplier.length) maxSupplier = supplier;
+      if (purchases.length > maxPurchases.length) maxPurchases = purchases;
+      if (remittances.length > maxRemittances.length) maxRemittances = remittances;
+      if (diff.length > maxDiff.length) maxDiff = diff;
+    }
+
+    // 也考虑总计行
+    final totalPurchasesText = _formatMoney(_totalPurchases);
+    final totalRemittancesText = _formatMoney(_totalRemittances);
+    final totalDiffText = _formatMoney(_totalDifference);
+    if (totalPurchasesText.length > maxPurchases.length) maxPurchases = totalPurchasesText;
+    if (totalRemittancesText.length > maxRemittances.length) maxRemittances = totalRemittancesText;
+    if (totalDiffText.length > maxDiff.length) maxDiff = totalDiffText;
+
+    final headerSizerRows = <DataRow>[
+      DataRow(
+        cells: [
+          DataCell(Opacity(opacity: 0, child: Text(maxDate))),
+          DataCell(Opacity(opacity: 0, child: Text(maxSupplier))),
+          DataCell(Opacity(opacity: 0, child: Text(maxPurchases))),
+          DataCell(Opacity(opacity: 0, child: Text(maxRemittances))),
+          DataCell(Opacity(opacity: 0, child: Text(maxDiff))),
+        ],
+      ),
+    ];
+
+    final bodyRows = <DataRow>[
+      ..._analysisData.map((item) {
+        return DataRow(
+          cells: [
+            DataCell(Text(item['date'] ?? '')),
+            DataCell(Text(item['supplierName'] ?? '')),
+            DataCell(Text(_formatMoney((item['totalPurchases'] as num).toDouble()),
+                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue))),
+            DataCell(Text(_formatMoney((item['totalRemittances'] as num).toDouble()),
+                style: TextStyle(color: Colors.orange))),
+            DataCell(Text(_formatMoney((item['difference'] as num).toDouble()),
+                style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: (item['difference'] as num).toDouble() >= 0 ? Colors.red : Colors.green))),
           ],
-          rows: [
-            ..._analysisData.map((item) {
-              return DataRow(
-                cells: [
-                  DataCell(Text(item['date'] ?? '')),
-                  DataCell(Text(item['supplierName'] ?? '')),
-                  DataCell(Text('¥${item['totalPurchases'].toStringAsFixed(2)}', 
-                    style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue))),
-                  DataCell(Text('¥${item['totalRemittances'].toStringAsFixed(2)}', 
-                    style: TextStyle(color: Colors.orange))),
-                  DataCell(Text('¥${item['difference'].toStringAsFixed(2)}', 
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: item['difference'] >= 0 ? Colors.red : Colors.green
-                    ))),
-                ],
-              );
-            }).toList(),
-            
-            // 总计行
-            if (_analysisData.isNotEmpty)
-              DataRow(
-                color: MaterialStateProperty.all(Colors.grey[100]),
-                cells: [
-                  DataCell(Text('总计', style: TextStyle(fontWeight: FontWeight.bold))),
-                  DataCell(Text('')),
-                  DataCell(Text('¥${_totalPurchases.toStringAsFixed(2)}', 
-                    style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue))),
-                  DataCell(Text('¥${_totalRemittances.toStringAsFixed(2)}', 
-                    style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange))),
-                  DataCell(Text('¥${_totalDifference.toStringAsFixed(2)}', 
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: _totalDifference >= 0 ? Colors.red : Colors.green
-                    ))),
-                ],
-              ),
+        );
+      }).toList(),
+      if (_analysisData.isNotEmpty)
+        DataRow(
+          color: MaterialStateProperty.all(Colors.grey[100]),
+          cells: [
+            DataCell(Text('总计', style: TextStyle(fontWeight: FontWeight.bold))),
+            DataCell(Text('')),
+            DataCell(Text(_formatMoney(_totalPurchases),
+                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue))),
+            DataCell(Text(_formatMoney(_totalRemittances),
+                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange))),
+            DataCell(Text(_formatMoney(_totalDifference),
+                style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: _totalDifference >= 0 ? Colors.red : Colors.green))),
           ],
         ),
-      ),
+    ];
+
+    return Column(
+      children: [
+        // 固定表头：上下滚动时可见；左右滚动与数据同步
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          controller: _headerHorizontalScrollController,
+          child: DataTable(
+            sortColumnIndex: _getSortColumnIndex(),
+            sortAscending: !_isDescending,
+            horizontalMargin: 12,
+            columnSpacing: 16,
+            headingTextStyle: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: Colors.blue[800],
+              fontSize: 12,
+            ),
+            dataTextStyle: TextStyle(fontSize: 11),
+            dataRowMinHeight: 0,
+            dataRowMaxHeight: 0,
+            columns: columns,
+            rows: headerSizerRows,
+          ),
+        ),
+        Expanded(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.vertical,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              controller: _dataHorizontalScrollController,
+              child: DataTable(
+                horizontalMargin: 12,
+                columnSpacing: 16,
+                headingTextStyle: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.blue[800],
+                  fontSize: 12,
+                ),
+                dataTextStyle: TextStyle(fontSize: 11),
+                headingRowHeight: 0, // 隐藏数据区表头，避免重复
+                columns: columns,
+                rows: bodyRows,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 

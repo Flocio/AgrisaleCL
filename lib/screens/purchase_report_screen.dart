@@ -1,6 +1,7 @@
 // lib/screens/purchase_report_screen.dart
 
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -201,6 +202,11 @@ class _PurchaseReportScreenState extends State<PurchaseReportScreen> {
           products: _products.map((p) => p.toJson()).toList(),
           totalQuantity: _totalQuantity,
           totalPrice: _totalPrice,
+          selectedProductName: _selectedProductName,
+          selectedSupplierId: _selectedSupplierId,
+          startDate: _startDate,
+          endDate: _endDate,
+          allSuppliers: _suppliers,
         ),
       ),
     );
@@ -210,16 +216,23 @@ class _PurchaseReportScreenState extends State<PurchaseReportScreen> {
   void _showFilterOptions() {
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) {
-        return Padding(
-          padding: EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+        return SingleChildScrollView(
+          child: Padding(
+            padding: EdgeInsets.only(
+              left: 16,
+              right: 16,
+              top: 16,
+              bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -288,12 +301,13 @@ class _PurchaseReportScreenState extends State<PurchaseReportScreen> {
                       Navigator.pop(context);
                     },
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red[400],
+                      backgroundColor: Colors.white,
                       minimumSize: Size(double.infinity, 44),
                     ),
                   ),
                 ),
-            ],
+              ],
+            ),
           ),
         );
       },
@@ -310,82 +324,150 @@ class _PurchaseReportScreenState extends State<PurchaseReportScreen> {
   
   // 选择产品对话框
   Future<void> _showProductSelectionDialog() async {
-    showDialog(
+    // 创建选项列表：第一个是"所有产品"，后面是所有产品
+    final List<MapEntry<String?, String>> productOptions = [
+      MapEntry<String?, String>(null, '所有产品'),
+      ..._products.map((p) => MapEntry<String?, String>(p.name, p.name)),
+    ];
+    
+    // 找到当前选中项的索引
+    int currentIndex = productOptions.indexWhere((entry) => entry.key == _selectedProductName);
+    if (currentIndex < 0) {
+      currentIndex = 0; // 默认选中"所有产品"
+    }
+    
+    int tempIndex = currentIndex;
+
+    final selectedIndex = await showDialog<int>(
       context: context,
-      builder: (BuildContext context) {
+      builder: (context) {
         return AlertDialog(
           title: Text('选择产品'),
-          content: Container(
-            width: double.maxFinite,
-            child: ListView.builder(
-              shrinkWrap: true,
-              itemCount: _products.length,
-              itemBuilder: (context, index) {
-                final product = _products[index];
-                return ListTile(
-                  title: Text(product.name),
-                  onTap: () {
-                    setState(() {
-                      _selectedProductName = product.name;
-                      _applyFilters();
-                    });
-                    Navigator.of(context).pop();
-                  },
-                );
-              },
+          content: SizedBox(
+            height: 200,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Expanded(
+                  child: StatefulBuilder(
+                    builder: (context, setStateDialog) {
+                      return CupertinoPicker(
+                        scrollController: FixedExtentScrollController(initialItem: currentIndex),
+                        itemExtent: 32,
+                        magnification: 1.1,
+                        useMagnifier: true,
+                        onSelectedItemChanged: (index) {
+                          setStateDialog(() {
+                            tempIndex = index;
+                          });
+                        },
+                        children: productOptions
+                            .map((entry) => Center(child: Text(entry.value)))
+                            .toList(),
+                      );
+                    },
+                  ),
+                ),
+              ],
             ),
           ),
-          actions: <Widget>[
+          actions: [
             TextButton(
+              onPressed: () => Navigator.of(context).pop(null),
               child: Text('取消'),
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(tempIndex),
+              child: Text('确定'),
             ),
           ],
         );
       },
     );
+
+    if (selectedIndex != null && selectedIndex >= 0 && selectedIndex < productOptions.length) {
+      final selectedEntry = productOptions[selectedIndex];
+      if (selectedEntry.key != _selectedProductName) {
+        setState(() {
+          _selectedProductName = selectedEntry.key;
+        });
+        _applyFilters();
+      }
+    }
   }
   
   // 选择供应商对话框
   Future<void> _showSupplierSelectionDialog() async {
-    showDialog(
+    // 创建选项列表：第一个是"所有供应商"，后面是所有供应商
+    final List<MapEntry<int?, String>> supplierOptions = [
+      MapEntry<int?, String>(null, '所有供应商'),
+      ..._suppliers.map((s) => MapEntry<int?, String>(s.id, s.name)),
+    ];
+    
+    // 找到当前选中项的索引
+    int currentIndex = supplierOptions.indexWhere((entry) => entry.key == _selectedSupplierId);
+    if (currentIndex < 0) {
+      currentIndex = 0; // 默认选中"所有供应商"
+    }
+    
+    int tempIndex = currentIndex;
+
+    final selectedIndex = await showDialog<int>(
       context: context,
-      builder: (BuildContext context) {
+      builder: (context) {
         return AlertDialog(
           title: Text('选择供应商'),
-          content: Container(
-            width: double.maxFinite,
-            child: ListView.builder(
-              shrinkWrap: true,
-              itemCount: _suppliers.length,
-              itemBuilder: (context, index) {
-                final supplier = _suppliers[index];
-                return ListTile(
-                  title: Text(supplier.name),
-                  onTap: () {
-                    setState(() {
-                      _selectedSupplierId = supplier.id;
-                      _applyFilters();
-                    });
-                    Navigator.of(context).pop();
-                  },
-                );
-              },
+          content: SizedBox(
+            height: 200,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Expanded(
+                  child: StatefulBuilder(
+                    builder: (context, setStateDialog) {
+                      return CupertinoPicker(
+                        scrollController: FixedExtentScrollController(initialItem: currentIndex),
+                        itemExtent: 32,
+                        magnification: 1.1,
+                        useMagnifier: true,
+                        onSelectedItemChanged: (index) {
+                          setStateDialog(() {
+                            tempIndex = index;
+                          });
+                        },
+                        children: supplierOptions
+                            .map((entry) => Center(child: Text(entry.value)))
+                            .toList(),
+                      );
+                    },
+                  ),
+                ),
+              ],
             ),
           ),
-          actions: <Widget>[
+          actions: [
             TextButton(
+              onPressed: () => Navigator.of(context).pop(null),
               child: Text('取消'),
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(tempIndex),
+              child: Text('确定'),
             ),
           ],
         );
       },
     );
+
+    if (selectedIndex != null && selectedIndex >= 0 && selectedIndex < supplierOptions.length) {
+      final selectedEntry = supplierOptions[selectedIndex];
+      if (selectedEntry.key != _selectedSupplierId) {
+        setState(() {
+          _selectedSupplierId = selectedEntry.key;
+        });
+        _applyFilters();
+      }
+    }
   }
   
   // 选择日期范围对话框
@@ -517,7 +599,7 @@ class _PurchaseReportScreenState extends State<PurchaseReportScreen> {
                                 label: Text('清除筛选条件'),
                                 onPressed: _resetFilters,
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.orange,
+                                  backgroundColor: Colors.white,
                                 ),
                               ),
                             ),
@@ -570,11 +652,11 @@ class _PurchaseReportScreenState extends State<PurchaseReportScreen> {
                                       ),
                                     ),
                                     Text(
-                                      '¥ ${purchase.totalPurchasePrice ?? 0.0}',
+                                      '${(-(purchase.totalPurchasePrice ?? 0.0)) >= 0 ? '+' : '-'}¥${(-(purchase.totalPurchasePrice ?? 0.0)).abs().toStringAsFixed(2)}',
                                       style: TextStyle(
                                         fontWeight: FontWeight.bold,
                                         fontSize: 15,
-                                        color: Colors.green[700],
+                                        color: (-(purchase.totalPurchasePrice ?? 0.0)) >= 0 ? Colors.red[700] : Colors.green[700],
                                       ),
                                     ),
                                   ],
@@ -618,11 +700,25 @@ class _PurchaseReportScreenState extends State<PurchaseReportScreen> {
                                          color: Colors.blue[700]),
                                     SizedBox(width: 4),
                                     Text(
-                                      '数量: ${purchase.quantity >= 0 ? '' : '-'}${_formatNumber(purchase.quantity.abs())} ${product.unit.value}',
+                                      '数量: ',
                                       style: TextStyle(
                                         fontSize: 13,
-                                        color: purchase.quantity >= 0 ? Colors.black87 : Colors.red[700],
-                                        fontWeight: purchase.quantity >= 0 ? FontWeight.normal : FontWeight.bold,
+                                        color: Colors.black87,
+                                      ),
+                                    ),
+                                    Text(
+                                      '${purchase.quantity >= 0 ? '+' : '-'}${_formatNumber(purchase.quantity.abs())}',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        color: purchase.quantity >= 0 ? Colors.green[700] : Colors.red[700],
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    Text(
+                                      ' ${product.unit.value}',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        color: Colors.black87,
                                       ),
                                     ),
                                     SizedBox(width: 16),
@@ -644,17 +740,19 @@ class _PurchaseReportScreenState extends State<PurchaseReportScreen> {
                                     padding: const EdgeInsets.only(top: 4),
                                     child: Row(
                                       children: [
-                                        Icon(Icons.note, 
-                                             size: 14, 
-                                             color: Colors.grey[600]),
-                                        SizedBox(width: 4),
+                                        Text(
+                                          '备注: ',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.purple,
+                                          ),
+                                        ),
                                         Expanded(
                                           child: Text(
-                                            '备注: ${purchase.note ?? ''}',
+                                            purchase.note ?? '',
                                             style: TextStyle(
                                               fontSize: 12,
                                               color: Colors.grey[700],
-                                              fontStyle: FontStyle.italic,
                                             ),
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
@@ -779,11 +877,7 @@ class _PurchaseReportScreenState extends State<PurchaseReportScreen> {
               children: [
                 Text('总记录数: ${_purchases.length}'),
                 Text(
-                  '净数量: ${_formatNumber(_totalQuantity)} ${_selectedProductName != null ? productUnit : ""}',
-                  style: TextStyle(
-                    color: _totalQuantity >= 0 ? Colors.black87 : Colors.red[700],
-                    fontWeight: _totalQuantity >= 0 ? FontWeight.normal : FontWeight.bold,
-                  ),
+                  '净数量: ${_totalQuantity >= 0 ? '+' : ''}${_formatNumber(_totalQuantity)} ${_selectedProductName != null ? productUnit : ""}',
                 ),
               ],
             ),
@@ -792,14 +886,10 @@ class _PurchaseReportScreenState extends State<PurchaseReportScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  '总进价: ¥${_totalPrice.toStringAsFixed(2)}',
-                  style: TextStyle(
-                    color: _totalPrice >= 0 ? Colors.green[700] : Colors.red[700],
-                    fontWeight: FontWeight.bold,
-                  ),
+                  '总采购额: ${(-_totalPrice) >= 0 ? '+' : '-'}¥${(-_totalPrice).abs().toStringAsFixed(2)}',
                 ),
                 if (_selectedProductName != null && _totalQuantity != 0)
-                  Text('平均单价: ¥${(_totalPrice / _totalQuantity).toStringAsFixed(2)}/${productUnit}'),
+                  Text('平均单价: ¥${(_totalPrice / _totalQuantity).abs().toStringAsFixed(2)}/${productUnit}'),
               ],
             ),
           ],
@@ -831,6 +921,11 @@ class PurchaseTableScreen extends StatelessWidget {
   final List<Map<String, dynamic>> products;
   final double totalQuantity;
   final double totalPrice;
+  final String? selectedProductName;
+  final int? selectedSupplierId;
+  final DateTime? startDate;
+  final DateTime? endDate;
+  final List<Supplier> allSuppliers;
 
   PurchaseTableScreen({
     required this.purchases,
@@ -838,6 +933,11 @@ class PurchaseTableScreen extends StatelessWidget {
     required this.products,
     required this.totalQuantity,
     required this.totalPrice,
+    this.selectedProductName,
+    this.selectedSupplierId,
+    this.startDate,
+    this.endDate,
+    required this.allSuppliers,
   });
 
   // 格式化数字显示：整数显示为整数，小数显示为小数
@@ -851,8 +951,48 @@ class PurchaseTableScreen extends StatelessWidget {
     }
   }
 
+  // 格式化日期
+  String _formatDate(DateTime date) {
+    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  }
+
   Future<void> _exportToCSV(BuildContext context) async {
-    String csvData = '日期,类型,产品,数量,单位,供应商,总进价,备注\n';
+    // 添加用户信息到CSV头部
+    final prefs = await SharedPreferences.getInstance();
+    final username = prefs.getString('current_username') ?? '未知用户';
+    
+    String csvData = '采购统计 - 用户: $username\n';
+    csvData += '导出时间: ${DateTime.now().toString().substring(0, 19)}\n';
+    
+    // 添加筛选信息
+    if (selectedProductName != null) {
+      csvData += '筛选产品: $selectedProductName\n';
+    }
+    if (selectedSupplierId != null) {
+      final supplier = allSuppliers.firstWhere(
+        (s) => s.id == selectedSupplierId,
+        orElse: () => Supplier(id: -1, userId: -1, name: '未知供应商'),
+      );
+      csvData += '筛选供应商: ${supplier.name}\n';
+    }
+    if (startDate != null || endDate != null) {
+      String dateRange = '日期范围: ';
+      if (startDate != null) {
+        dateRange += _formatDate(startDate!);
+      } else {
+        dateRange += '无限制';
+      }
+      dateRange += ' 至 ';
+      if (endDate != null) {
+        dateRange += _formatDate(endDate!);
+      } else {
+        dateRange += '无限制';
+      }
+      csvData += '$dateRange\n';
+    }
+    
+    csvData += '\n';
+    csvData += '日期,类型,产品,数量,单位,供应商,总进价,备注\n';
     for (var purchase in purchases) {
       final supplier = suppliers.firstWhere(
             (s) => s['id'] == purchase['supplierId'],
@@ -873,11 +1013,31 @@ class PurchaseTableScreen extends StatelessWidget {
     csvData += '净数量,${_formatNumber(totalQuantity)}\n';
     csvData += '总进价,${totalPrice.toStringAsFixed(2)}\n';
 
+    // 生成文件名
+    String baseFileName;
+    if (selectedProductName != null && selectedSupplierId != null) {
+      final supplier = allSuppliers.firstWhere(
+        (s) => s.id == selectedSupplierId,
+        orElse: () => Supplier(id: -1, userId: -1, name: '未知供应商'),
+      );
+      baseFileName = '${selectedProductName}_${supplier.name}_采购统计';
+    } else if (selectedProductName != null) {
+      baseFileName = '${selectedProductName}_采购统计';
+    } else if (selectedSupplierId != null) {
+      final supplier = allSuppliers.firstWhere(
+        (s) => s.id == selectedSupplierId,
+        orElse: () => Supplier(id: -1, userId: -1, name: '未知供应商'),
+      );
+      baseFileName = '${supplier.name}_采购统计';
+    } else {
+      baseFileName = '采购统计';
+    }
+
     // 使用统一的导出服务
     await ExportService.showExportOptions(
       context: context,
       csvData: csvData,
-      baseFileName: '采购报告',
+      baseFileName: baseFileName,
     );
   }
 
@@ -885,7 +1045,7 @@ class PurchaseTableScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('采购报告表格', style: TextStyle(
+        title: Text('采购统计表格', style: TextStyle(
           fontWeight: FontWeight.bold,
           color: Colors.white,
         )),
@@ -937,20 +1097,20 @@ class PurchaseTableScreen extends StatelessWidget {
                     children: [
                         Text('净数量', style: TextStyle(fontSize: 12, color: Colors.grey[700])),
                         Text(
-                          '${_formatNumber(totalQuantity)}', 
+                          '${totalQuantity >= 0 ? '+' : '-'}${_formatNumber(totalQuantity.abs())}', 
                           style: TextStyle(
                             fontSize: 16, 
                             fontWeight: FontWeight.bold,
-                            color: totalQuantity >= 0 ? Colors.black87 : Colors.red[700],
+                            color: totalQuantity >= 0 ? Colors.green[700] : Colors.red[700],
                           ),
                         ),
                     ],
                   ),
                   Column(
                     children: [
-                      Text('总进价', style: TextStyle(fontSize: 12, color: Colors.grey[700])),
-                      Text('¥${totalPrice.toStringAsFixed(2)}', 
-                           style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green[700])),
+                      Text('总采购额', style: TextStyle(fontSize: 12, color: Colors.grey[700])),
+                      Text('${(-totalPrice) >= 0 ? '+' : '-'}¥${(-totalPrice).abs().toStringAsFixed(2)}', 
+                           style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: (-totalPrice) >= 0 ? Colors.red[700] : Colors.green[700])),
                     ],
                   ),
                 ],
@@ -1017,7 +1177,7 @@ class PurchaseTableScreen extends StatelessWidget {
                   DataColumn(label: Text('数量')),
                   DataColumn(label: Text('单位')),
                   DataColumn(label: Text('供应商')),
-                  DataColumn(label: Text('总进价')),
+                  DataColumn(label: Text('金额')),
                   DataColumn(label: Text('备注')),
                 ],
                 rows: purchases.map((purchase) {
@@ -1054,8 +1214,8 @@ class PurchaseTableScreen extends StatelessWidget {
                       Text(
                         '${(purchase['quantity'] as double) >= 0 ? '' : '-'}${_formatNumber((purchase['quantity'] as double).abs())}',
                         style: TextStyle(
-                          color: (purchase['quantity'] as double) >= 0 ? Colors.black87 : Colors.red[700],
-                          fontWeight: (purchase['quantity'] as double) >= 0 ? FontWeight.normal : FontWeight.bold,
+                          color: (purchase['quantity'] as double) >= 0 ? Colors.green[700] : Colors.red[700],
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
                     ),
@@ -1063,10 +1223,10 @@ class PurchaseTableScreen extends StatelessWidget {
                     DataCell(Text(supplier['name'])),
                                 DataCell(
                                   Text(
-                                    purchase['totalPurchasePrice'].toString(),
+                                    '${(-(purchase['totalPurchasePrice'] as num).toDouble()) >= 0 ? '+' : '-'}¥${(-(purchase['totalPurchasePrice'] as num).toDouble()).abs().toStringAsFixed(2)}',
                                     style: TextStyle(
                                       fontWeight: FontWeight.bold,
-                                      color: Colors.green[700],
+                                      color: (-(purchase['totalPurchasePrice'] as num).toDouble()) >= 0 ? Colors.red[700] : Colors.green[700],
                                     ),
                                   ),
                                 ),

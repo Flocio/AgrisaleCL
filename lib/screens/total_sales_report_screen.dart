@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -192,12 +193,14 @@ class _TotalSalesReportScreenState extends State<TotalSalesReportScreen> {
     double totalPrice = 0.0;
     
     for (var record in filteredRecords) {
-      // 销售是正值，退货是负值
+      // 净销量口径：
+      // - 销售：库存减少 → 计为负数（取相反数）
+      // - 退货：库存增加 → 计为正数（不取反）
       if (record['type'] == '销售') {
-        totalQuantity += (record['quantity'] as num).toDouble();
+        totalQuantity -= (record['quantity'] as num).toDouble();
         totalPrice += (record['totalPrice'] as num).toDouble();
       } else {
-        totalQuantity -= (record['quantity'] as num).toDouble();
+        totalQuantity += (record['quantity'] as num).toDouble();
         totalPrice -= (record['totalPrice'] as num).toDouble();
       }
     }
@@ -237,6 +240,11 @@ class _TotalSalesReportScreenState extends State<TotalSalesReportScreen> {
           products: _products.map((p) => p.toJson()).toList(),
           totalQuantity: _totalQuantity,
           totalPrice: _totalPrice,
+          selectedProductName: _selectedProductName,
+          selectedCustomerId: _selectedCustomerId,
+          startDate: _startDate,
+          endDate: _endDate,
+          allCustomers: _customers,
         ),
       ),
     );
@@ -246,90 +254,98 @@ class _TotalSalesReportScreenState extends State<TotalSalesReportScreen> {
   void _showFilterOptions() {
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) {
-        return Padding(
-          padding: EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    '筛选与刷新',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
+        return SingleChildScrollView(
+          child: Padding(
+            padding: EdgeInsets.only(
+              left: 16,
+              right: 16,
+              top: 16,
+              bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      '筛选与刷新',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
-                  TextButton.icon(
-                    icon: Icon(Icons.refresh),
-                    label: Text('刷新数据'),
-                    onPressed: () {
-                      _fetchData();
-                      Navigator.pop(context);
-                    },
-                  ),
-                ],
-              ),
-              Divider(),
-              ListTile(
-                leading: Icon(Icons.inventory, color: Colors.green),
-                title: Text('按产品筛选'),
-                trailing: Icon(Icons.arrow_forward_ios, size: 16),
-                onTap: () {
-                  Navigator.pop(context);
-                  _showProductSelectionDialog();
-                },
-              ),
-              ListTile(
-                leading: Icon(Icons.person, color: Colors.orange),
-                title: Text('按客户筛选'),
-                trailing: Icon(Icons.arrow_forward_ios, size: 16),
-                onTap: () {
-                  Navigator.pop(context);
-                  _showCustomerSelectionDialog();
-                },
-              ),
-              ListTile(
-                leading: Icon(Icons.date_range, color: Colors.purple),
-                title: Text('按日期范围筛选'),
-                trailing: Icon(Icons.arrow_forward_ios, size: 16),
-                onTap: () {
-                  Navigator.pop(context);
-                  _showDateRangePickerDialog();
-                },
-              ),
-              ListTile(
-                leading: Icon(Icons.sort, color: Colors.purple),
-                title: Text('切换排序顺序'),
-                subtitle: Text(_isDescending ? '当前: 最新在前' : '当前: 最早在前'),
-                onTap: () {
-                  _toggleSortOrder();
-                  Navigator.pop(context);
-                },
-              ),
-              if (_hasFilters())
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: ElevatedButton.icon(
-                    icon: Icon(Icons.clear_all),
-                    label: Text('清除所有筛选条件'),
-                    onPressed: () {
-                      _resetFilters();
-                      Navigator.pop(context);
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red[400],
-                      minimumSize: Size(double.infinity, 44),
+                    TextButton.icon(
+                      icon: Icon(Icons.refresh),
+                      label: Text('刷新数据'),
+                      onPressed: () {
+                        _fetchData();
+                        Navigator.pop(context);
+                      },
                     ),
-                  ),
+                  ],
                 ),
-            ],
+                Divider(),
+                ListTile(
+                  leading: Icon(Icons.inventory, color: Colors.green),
+                  title: Text('按产品筛选'),
+                  trailing: Icon(Icons.arrow_forward_ios, size: 16),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _showProductSelectionDialog();
+                  },
+                ),
+                ListTile(
+                  leading: Icon(Icons.person, color: Colors.orange),
+                  title: Text('按客户筛选'),
+                  trailing: Icon(Icons.arrow_forward_ios, size: 16),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _showCustomerSelectionDialog();
+                  },
+                ),
+                ListTile(
+                  leading: Icon(Icons.date_range, color: Colors.purple),
+                  title: Text('按日期范围筛选'),
+                  trailing: Icon(Icons.arrow_forward_ios, size: 16),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _showDateRangePickerDialog();
+                  },
+                ),
+                ListTile(
+                  leading: Icon(Icons.sort, color: Colors.purple),
+                  title: Text('切换排序顺序'),
+                  subtitle: Text(_isDescending ? '当前: 最新在前' : '当前: 最早在前'),
+                  onTap: () {
+                    _toggleSortOrder();
+                    Navigator.pop(context);
+                  },
+                ),
+                if (_hasFilters())
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: ElevatedButton.icon(
+                      icon: Icon(Icons.clear_all),
+                      label: Text('清除所有筛选条件'),
+                      onPressed: () {
+                        _resetFilters();
+                        Navigator.pop(context);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        minimumSize: Size(double.infinity, 44),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
         );
       },
@@ -346,92 +362,150 @@ class _TotalSalesReportScreenState extends State<TotalSalesReportScreen> {
   
   // 选择产品对话框
   Future<void> _showProductSelectionDialog() async {
-    showDialog(
+    // 创建选项列表：第一个是"所有产品"，后面是所有产品
+    final List<MapEntry<String?, String>> productOptions = [
+      MapEntry<String?, String>(null, '所有产品'),
+      ..._products.map((p) => MapEntry<String?, String>(p.name, p.name)),
+    ];
+    
+    // 找到当前选中项的索引
+    int currentIndex = productOptions.indexWhere((entry) => entry.key == _selectedProductName);
+    if (currentIndex < 0) {
+      currentIndex = 0; // 默认选中"所有产品"
+    }
+    
+    int tempIndex = currentIndex;
+
+    final selectedIndex = await showDialog<int>(
       context: context,
-      builder: (BuildContext context) {
+      builder: (context) {
         return AlertDialog(
           title: Text('选择产品'),
-          content: Container(
-            width: double.maxFinite,
-            child: _products.isEmpty
-                ? Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Text('暂无产品数据', textAlign: TextAlign.center),
-                  )
-                : ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: _products.length,
-                    itemBuilder: (context, index) {
-                      final product = _products[index];
-                      return ListTile(
-                        title: Text(product.name),
-                        onTap: () {
-                          setState(() {
-                            _selectedProductName = product.name;
-                            _applyFilters();
+          content: SizedBox(
+            height: 200,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Expanded(
+                  child: StatefulBuilder(
+                    builder: (context, setStateDialog) {
+                      return CupertinoPicker(
+                        scrollController: FixedExtentScrollController(initialItem: currentIndex),
+                        itemExtent: 32,
+                        magnification: 1.1,
+                        useMagnifier: true,
+                        onSelectedItemChanged: (index) {
+                          setStateDialog(() {
+                            tempIndex = index;
                           });
-                          Navigator.of(context).pop();
                         },
+                        children: productOptions
+                            .map((entry) => Center(child: Text(entry.value)))
+                            .toList(),
                       );
                     },
                   ),
+                ),
+              ],
+            ),
           ),
-          actions: <Widget>[
+          actions: [
             TextButton(
+              onPressed: () => Navigator.of(context).pop(null),
               child: Text('取消'),
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(tempIndex),
+              child: Text('确定'),
             ),
           ],
         );
       },
     );
+
+    if (selectedIndex != null && selectedIndex >= 0 && selectedIndex < productOptions.length) {
+      final selectedEntry = productOptions[selectedIndex];
+      if (selectedEntry.key != _selectedProductName) {
+        setState(() {
+          _selectedProductName = selectedEntry.key;
+        });
+        _applyFilters();
+      }
+    }
   }
   
   // 选择客户对话框
   Future<void> _showCustomerSelectionDialog() async {
-    showDialog(
+    // 创建选项列表：第一个是"所有客户"，后面是所有客户
+    final List<MapEntry<int?, String>> customerOptions = [
+      MapEntry<int?, String>(null, '所有客户'),
+      ..._customers.map((c) => MapEntry<int?, String>(c.id, c.name)),
+    ];
+    
+    // 找到当前选中项的索引
+    int currentIndex = customerOptions.indexWhere((entry) => entry.key == _selectedCustomerId);
+    if (currentIndex < 0) {
+      currentIndex = 0; // 默认选中"所有客户"
+    }
+    
+    int tempIndex = currentIndex;
+
+    final selectedIndex = await showDialog<int>(
       context: context,
-      builder: (BuildContext context) {
+      builder: (context) {
         return AlertDialog(
           title: Text('选择客户'),
-          content: Container(
-            width: double.maxFinite,
-            child: _customers.isEmpty
-                ? Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Text('暂无客户数据', textAlign: TextAlign.center),
-                  )
-                : ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: _customers.length,
-                    itemBuilder: (context, index) {
-                      final customer = _customers[index];
-                      return ListTile(
-                        title: Text(customer.name),
-                        onTap: () {
-                          setState(() {
-                            _selectedCustomerId = customer.id;
-                            _applyFilters();
+          content: SizedBox(
+            height: 200,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Expanded(
+                  child: StatefulBuilder(
+                    builder: (context, setStateDialog) {
+                      return CupertinoPicker(
+                        scrollController: FixedExtentScrollController(initialItem: currentIndex),
+                        itemExtent: 32,
+                        magnification: 1.1,
+                        useMagnifier: true,
+                        onSelectedItemChanged: (index) {
+                          setStateDialog(() {
+                            tempIndex = index;
                           });
-                          Navigator.of(context).pop();
                         },
+                        children: customerOptions
+                            .map((entry) => Center(child: Text(entry.value)))
+                            .toList(),
                       );
                     },
                   ),
+                ),
+              ],
+            ),
           ),
-          actions: <Widget>[
+          actions: [
             TextButton(
+              onPressed: () => Navigator.of(context).pop(null),
               child: Text('取消'),
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(tempIndex),
+              child: Text('确定'),
             ),
           ],
         );
       },
     );
+
+    if (selectedIndex != null && selectedIndex >= 0 && selectedIndex < customerOptions.length) {
+      final selectedEntry = customerOptions[selectedIndex];
+      if (selectedEntry.key != _selectedCustomerId) {
+        setState(() {
+          _selectedCustomerId = selectedEntry.key;
+        });
+        _applyFilters();
+      }
+    }
   }
   
   // 选择日期范围对话框
@@ -579,7 +653,7 @@ class _TotalSalesReportScreenState extends State<TotalSalesReportScreen> {
                               label: Text('清除筛选条件'),
                               onPressed: _resetFilters,
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.orange,
+                                backgroundColor: Colors.white,
                               ),
                             ),
                           ),
@@ -614,9 +688,10 @@ class _TotalSalesReportScreenState extends State<TotalSalesReportScreen> {
                       Color textColor = record['type'] == '销售' ? Colors.green : Colors.red;
                       
                       // 根据类型决定金额正负
+                      double priceValue = (record['totalPrice'] as num).toDouble();
                       String amount = record['type'] == '销售' 
-                          ? '${record['totalPrice']}' 
-                          : '-${record['totalPrice']}';
+                          ? '+¥${priceValue.toStringAsFixed(2)}' 
+                          : '-¥${priceValue.toStringAsFixed(2)}';
                       
                       return Card(
                         margin: EdgeInsets.symmetric(vertical: 4, horizontal: 2),
@@ -668,7 +743,7 @@ class _TotalSalesReportScreenState extends State<TotalSalesReportScreen> {
                                     ],
                                   ),
                                   Text(
-                                    '¥ $amount',
+                                    amount,
                                     style: TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 15,
@@ -693,8 +768,34 @@ class _TotalSalesReportScreenState extends State<TotalSalesReportScreen> {
                                        color: Colors.blue[700]),
                                   SizedBox(width: 4),
                                   Text(
-                                    '数量: ${_formatNumber(record['quantity'])} ${product.unit.value}',
-                                    style: TextStyle(fontSize: 13),
+                                    '数量: ',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: Colors.black87,
+                                    ),
+                                  ),
+                                  Text(
+                                    () {
+                                      final double q = (record['quantity'] as num).toDouble();
+                                      if (record['type'] == '销售') {
+                                        // 销售显示为负数
+                                        return '-${_formatNumber(q.abs())}';
+                                      }
+                                      // 退货显示原值；若为正数则加 +
+                                      return '${q >= 0 ? '+' : '-'}${_formatNumber(q.abs())}';
+                                    }(),
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: record['type'] == '销售' ? Colors.green[700] : Colors.red[700],
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  Text(
+                                    ' ${product.unit.value}',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: Colors.black87,
+                                    ),
                                   ),
                                   SizedBox(width: 16),
                                   Icon(Icons.person, 
@@ -715,17 +816,19 @@ class _TotalSalesReportScreenState extends State<TotalSalesReportScreen> {
                                   padding: const EdgeInsets.only(top: 4),
                                   child: Row(
                                     children: [
-                                      Icon(Icons.note, 
-                                           size: 14, 
-                                           color: Colors.grey[600]),
-                                      SizedBox(width: 4),
+                                      Text(
+                                        '备注: ',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.purple,
+                                        ),
+                                      ),
                                       Expanded(
                                         child: Text(
-                                          '备注: ${record['note']}',
+                                          record['note'].toString(),
                                           style: TextStyle(
                                             fontSize: 12,
                                             color: Colors.grey[700],
-                                            fontStyle: FontStyle.italic,
                                           ),
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
@@ -828,10 +931,9 @@ class _TotalSalesReportScreenState extends State<TotalSalesReportScreen> {
           ).unit.value)
         : '';
 
-    final String priceSign = _totalPrice >= 0 ? '+' : '';
-    final Color priceColor = _totalPrice >= 0 ? Colors.green : Colors.red;
+    final String priceSign = _totalPrice >= 0 ? '+' : '-';
+    
     final String quantitySign = _totalQuantity >= 0 ? '+' : '';
-    final Color quantityColor = _totalQuantity >= 0 ? Colors.green : Colors.red;
     
     return Card(
       margin: EdgeInsets.all(8),
@@ -855,8 +957,7 @@ class _TotalSalesReportScreenState extends State<TotalSalesReportScreen> {
               children: [
                 Text('总记录数: ${_combinedRecords.length}'),
                 Text(
-                  '净数量: $quantitySign${_formatNumber(_totalQuantity)} ${_selectedProductName != null ? productUnit : ""}',
-                  style: TextStyle(color: quantityColor),
+                  '净销量: $quantitySign${_formatNumber(_totalQuantity)} ${_selectedProductName != null ? productUnit : ""}',
                 ),
               ],
             ),
@@ -865,8 +966,7 @@ class _TotalSalesReportScreenState extends State<TotalSalesReportScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  '净收入: $priceSign¥${_totalPrice.toStringAsFixed(2)}',
-                  style: TextStyle(color: priceColor, fontWeight: FontWeight.bold),
+                  '净销售额: $priceSign¥${_totalPrice.abs().toStringAsFixed(2)}',
                 ),
                 if (_selectedProductName != null && _totalQuantity != 0 && _totalPrice != 0)
                   Text('平均单价: ¥${(_totalPrice / _totalQuantity).abs().toStringAsFixed(2)}/${productUnit}'),
@@ -885,6 +985,11 @@ class TotalSalesTableScreen extends StatelessWidget {
   final List<Map<String, dynamic>> products;
   final double totalQuantity;
   final double totalPrice;
+  final String? selectedProductName;
+  final int? selectedCustomerId;
+  final DateTime? startDate;
+  final DateTime? endDate;
+  final List<Customer> allCustomers;
 
   TotalSalesTableScreen({
     required this.records,
@@ -892,6 +997,11 @@ class TotalSalesTableScreen extends StatelessWidget {
     required this.products,
     required this.totalQuantity,
     required this.totalPrice,
+    this.selectedProductName,
+    this.selectedCustomerId,
+    this.startDate,
+    this.endDate,
+    required this.allCustomers,
   });
 
   // 格式化数字显示：整数显示为整数，小数显示为小数
@@ -905,13 +1015,47 @@ class TotalSalesTableScreen extends StatelessWidget {
     }
   }
 
+  // 格式化日期
+  String _formatDate(DateTime date) {
+    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  }
+
   Future<void> _exportToCSV(BuildContext context) async {
     // 添加用户信息到CSV头部
     final prefs = await SharedPreferences.getInstance();
     final username = prefs.getString('current_username') ?? '未知用户';
     
-    String csvData = '总销售报告 - 用户: $username\n';
-    csvData += '导出时间: ${DateTime.now().toString().substring(0, 19)}\n\n';
+    String csvData = '销售汇总 - 用户: $username\n';
+    csvData += '导出时间: ${DateTime.now().toString().substring(0, 19)}\n';
+    
+    // 添加筛选信息
+    if (selectedProductName != null) {
+      csvData += '筛选产品: $selectedProductName\n';
+    }
+    if (selectedCustomerId != null) {
+      final customer = allCustomers.firstWhere(
+        (c) => c.id == selectedCustomerId,
+        orElse: () => Customer(id: -1, userId: -1, name: '未知客户'),
+      );
+      csvData += '筛选客户: ${customer.name}\n';
+    }
+    if (startDate != null || endDate != null) {
+      String dateRange = '日期范围: ';
+      if (startDate != null) {
+        dateRange += _formatDate(startDate!);
+      } else {
+        dateRange += '无限制';
+      }
+      dateRange += ' 至 ';
+      if (endDate != null) {
+        dateRange += _formatDate(endDate!);
+      } else {
+        dateRange += '无限制';
+      }
+      csvData += '$dateRange\n';
+    }
+    
+    csvData += '\n';
     csvData += '日期,类型,产品,数量,单位,客户,总金额,备注\n';
     for (var record in records) {
       final customer = customers.firstWhere(
@@ -928,10 +1072,12 @@ class TotalSalesTableScreen extends StatelessWidget {
           ? record['totalPrice'].toString() 
           : '-${record['totalPrice']}';
       
-      // 根据类型决定数量正负
+      // 数量显示口径同页面：
+      // 销售：显示为负数；退货：显示原值（正数带 +）
+      final double q = (record['quantity'] as num).toDouble();
       String quantity = record['type'] == '销售'
-          ? _formatNumber(record['quantity'])
-          : '-${_formatNumber(record['quantity'])}';
+          ? '-${_formatNumber(q.abs())}'
+          : '${q >= 0 ? '+' : '-'}${_formatNumber(q.abs())}';
       
       csvData += '${record['date']},${record['type']},${record['productName']},$quantity,${product['unit']},${customer['name']},$amount,${record['note'] ?? ''}\n';
     }
@@ -939,28 +1085,49 @@ class TotalSalesTableScreen extends StatelessWidget {
     // 添加统计信息
     csvData += '\n总计,,,,,\n';
     csvData += '记录数,${records.length}\n';
-    csvData += '净数量,${_formatNumber(totalQuantity)}\n';
-    csvData += '净收入,${totalPrice.toStringAsFixed(2)}\n';
+    csvData += '净销量,${_formatNumber(totalQuantity)}\n';
+    csvData += '净销售额,${totalPrice.toStringAsFixed(2)}\n';
+
+    // 生成文件名
+    String baseFileName;
+    if (selectedProductName != null && selectedCustomerId != null) {
+      final customer = allCustomers.firstWhere(
+        (c) => c.id == selectedCustomerId,
+        orElse: () => Customer(id: -1, userId: -1, name: '未知客户'),
+      );
+      baseFileName = '${selectedProductName}_${customer.name}_销售汇总';
+    } else if (selectedProductName != null) {
+      baseFileName = '${selectedProductName}_销售汇总';
+    } else if (selectedCustomerId != null) {
+      final customer = allCustomers.firstWhere(
+        (c) => c.id == selectedCustomerId,
+        orElse: () => Customer(id: -1, userId: -1, name: '未知客户'),
+      );
+      baseFileName = '${customer.name}_销售汇总';
+    } else {
+      baseFileName = '销售汇总';
+    }
 
     // 使用统一的导出服务
     await ExportService.showExportOptions(
       context: context,
       csvData: csvData,
-      baseFileName: '总销售报告',
+      baseFileName: baseFileName,
     );
   }
 
   @override
   Widget build(BuildContext context) {
     // 处理正负符号和颜色
-    final String quantitySign = totalQuantity >= 0 ? '+' : '';
-    final Color quantityColor = totalQuantity >= 0 ? Colors.green : Colors.red;
-    final String priceSign = totalPrice >= 0 ? '+' : '';
+    // 净销量：负数(销售更多)为绿；正数(退货更多)为红；显示必须带正负号
+    final String quantitySign = totalQuantity >= 0 ? '+' : '-';
+    final Color quantityColor = totalQuantity < 0 ? Colors.green : Colors.red;
+    final String priceSign = totalPrice >= 0 ? '+' : '-';
     final Color priceColor = totalPrice >= 0 ? Colors.green : Colors.red;
     
     return Scaffold(
       appBar: AppBar(
-        title: Text('总销售报告表格', style: TextStyle(
+        title: Text('销售汇总表格', style: TextStyle(
           fontWeight: FontWeight.bold,
           color: Colors.white,
         )),
@@ -1010,15 +1177,15 @@ class TotalSalesTableScreen extends StatelessWidget {
                   ),
                   Column(
                     children: [
-                      Text('净数量', style: TextStyle(fontSize: 12, color: Colors.grey[700])),
-                      Text('$quantitySign${_formatNumber(totalQuantity)}', 
+                      Text('净销量', style: TextStyle(fontSize: 12, color: Colors.grey[700])),
+                      Text('$quantitySign${_formatNumber(totalQuantity.abs())}', 
                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: quantityColor)),
                     ],
                   ),
                   Column(
                     children: [
-                      Text('净收入', style: TextStyle(fontSize: 12, color: Colors.grey[700])),
-                      Text('$priceSign¥${totalPrice.toStringAsFixed(2)}', 
+                      Text('净销售额', style: TextStyle(fontSize: 12, color: Colors.grey[700])),
+                      Text('$priceSign¥${totalPrice.abs().toStringAsFixed(2)}',
                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: priceColor)),
                     ],
                   ),
@@ -1103,14 +1270,16 @@ class TotalSalesTableScreen extends StatelessWidget {
                             Color textColor = record['type'] == '销售' ? Colors.green : Colors.red;
                             
                             // 根据类型决定金额正负
+                            double priceValue = (record['totalPrice'] as num).toDouble();
                             String amount = record['type'] == '销售' 
-                                ? record['totalPrice'].toString() 
-                                : '-${record['totalPrice']}';
+                                ? '+¥${priceValue.toStringAsFixed(2)}' 
+                                : '-¥${priceValue.toStringAsFixed(2)}';
                             
                             // 根据类型决定数量正负
+                            final double q = (record['quantity'] as num).toDouble();
                             String quantity = record['type'] == '销售'
-                                ? _formatNumber(record['quantity'])
-                                : '-${_formatNumber(record['quantity'])}';
+                                ? '-${_formatNumber(q.abs())}'
+                                : '${q >= 0 ? '+' : '-'}${_formatNumber(q.abs())}';
                             
                             return DataRow(
                               cells: [

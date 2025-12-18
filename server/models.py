@@ -236,7 +236,7 @@ class PurchaseCreate(BaseModel):
     quantity: float = Field(..., description="采购数量（可为负数表示退货）")
     purchaseDate: Optional[str] = Field(None, description="采购日期（ISO8601格式）")
     supplierId: Optional[int] = Field(None, description="供应商ID")
-    totalPurchasePrice: Optional[float] = Field(None, ge=0, description="总进价")
+    totalPurchasePrice: Optional[float] = Field(None, description="总进价（可为负数表示退货退款）")
     note: Optional[str] = Field(None, max_length=1000, description="备注")
 
     @validator('purchaseDate')
@@ -255,7 +255,7 @@ class PurchaseUpdate(BaseModel):
     quantity: Optional[float] = None
     purchaseDate: Optional[str] = None
     supplierId: Optional[int] = None
-    totalPurchasePrice: Optional[float] = Field(None, ge=0)
+    totalPurchasePrice: Optional[float] = None
     note: Optional[str] = Field(None, max_length=1000)
 
     @validator('purchaseDate')

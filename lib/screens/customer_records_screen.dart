@@ -43,26 +43,43 @@ class _CustomerRecordsScreenState extends State<CustomerRecordsScreen> {
   // 日期筛选相关变量
   DateTimeRange? _selectedDateRange;
   
+  // 滚动控制器和指示器
+  ScrollController? _summaryScrollController;
+  double _summaryScrollPosition = 0.0;
+  double _summaryScrollMaxExtent = 0.0;
+  
   // 汇总数据
+  int _totalRecordCount = 0; // 总记录数
+  int _purchaseRecordCount = 0; // 购买记录数
+  int _returnRecordCount = 0; // 退货记录数
   double _totalPurchaseQuantity = 0.0;
   double _totalPurchaseAmount = 0.0;
   double _totalReturnQuantity = 0.0;
   double _totalReturnAmount = 0.0;
   double _netQuantity = 0.0;
   double _netAmount = 0.0;
-  
-  // 滚动控制器
-  final ScrollController _summaryScrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
+    _summaryScrollController = ScrollController();
+    _summaryScrollController!.addListener(_onSummaryScroll);
     _fetchRecords();
   }
-  
+
+  void _onSummaryScroll() {
+    if (_summaryScrollController != null && _summaryScrollController!.hasClients) {
+      setState(() {
+        _summaryScrollPosition = _summaryScrollController!.offset;
+        _summaryScrollMaxExtent = _summaryScrollController!.position.maxScrollExtent;
+      });
+    }
+  }
+
   @override
   void dispose() {
-    _summaryScrollController.dispose();
+    _summaryScrollController?.removeListener(_onSummaryScroll);
+    _summaryScrollController?.dispose();
     super.dispose();
   }
 
@@ -222,6 +239,8 @@ class _CustomerRecordsScreenState extends State<CustomerRecordsScreen> {
   }
 
   void _calculateSummary(List<Map<String, dynamic>> records) {
+    int purchaseRecordCount = 0;
+    int returnRecordCount = 0;
     double purchaseQuantity = 0.0;
     double purchaseAmount = 0.0;
     double returnQuantity = 0.0;
@@ -229,15 +248,20 @@ class _CustomerRecordsScreenState extends State<CustomerRecordsScreen> {
 
     for (var record in records) {
       if (record['type'] == '购买') {
+        purchaseRecordCount++;
         purchaseQuantity += (record['quantity'] as num).toDouble();
         purchaseAmount += (record['totalPrice'] as num).toDouble();
       } else if (record['type'] == '退货') {
+        returnRecordCount++;
         returnQuantity += (record['quantity'] as num).toDouble();
         returnAmount += (record['totalPrice'] as num).toDouble();
       }
     }
 
     setState(() {
+      _totalRecordCount = records.length;
+      _purchaseRecordCount = purchaseRecordCount;
+      _returnRecordCount = returnRecordCount;
       _totalPurchaseQuantity = purchaseQuantity;
       _totalPurchaseAmount = purchaseAmount;
       _totalReturnQuantity = returnQuantity;
@@ -297,12 +321,28 @@ class _CustomerRecordsScreenState extends State<CustomerRecordsScreen> {
     // 添加总计行
     rows.add([]);
     rows.add(['总计', '', '', 
-              _formatNumber(_netQuantity), 
+              '${_netQuantity >= 0 ? '+' : ''}${_formatNumber(_netQuantity)}', 
               _selectedProduct != '所有产品' 
                   ? (_products.firstWhere((p) => p.name == _selectedProduct, orElse: () => Product(id: -1, userId: -1, name: '', unit: ProductUnit.kilogram, stock: 0.0, version: 1)).unit.value)
                   : '', 
               _netAmount.toStringAsFixed(2), 
               '']);
+    
+    // 添加汇总信息
+    rows.add([]);
+    rows.add(['汇总信息']);
+    rows.add(['总记录数', '$_totalRecordCount']);
+    rows.add(['购买记录数', '$_purchaseRecordCount']);
+    rows.add(['退货记录数', '$_returnRecordCount']);
+    rows.add(['购买总量', _formatNumber(_totalPurchaseQuantity)]);
+    rows.add(['退货总量', _formatNumber(_totalReturnQuantity)]);
+    rows.add(['净数量', _formatNumber(_netQuantity)]);
+    rows.add(['购买总额', _totalPurchaseAmount.toStringAsFixed(2)]);
+    rows.add(['退货总额', _totalReturnAmount.toStringAsFixed(2)]);
+    // 正数不显示+号，避免Excel将其识别为公式
+    rows.add(['净销售额', _netAmount >= 0 
+        ? _netAmount.toStringAsFixed(2) 
+        : '-${_netAmount.abs().toStringAsFixed(2)}']);
 
     String csv = const ListToCsvConverter().convert(rows);
 
@@ -567,31 +607,35 @@ class _CustomerRecordsScreenState extends State<CustomerRecordsScreen> {
               ? Expanded(
                   child: Center(
                     child: SingleChildScrollView(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.receipt_long, size: 64, color: Colors.grey[400]),
-                          SizedBox(height: 16),
-                          Text(
-                            '暂无交易记录',
-                            style: TextStyle(
-                              fontSize: 18,
-                              color: Colors.grey[600],
+                      child: Padding(
+                        padding: EdgeInsets.all(16),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.receipt_long, size: 64, color: Colors.grey[400]),
+                            SizedBox(height: 16),
+                            Text(
+                              '暂无交易记录',
+                              style: TextStyle(
+                                fontSize: 18,
+                                color: Colors.grey[600],
+                              ),
+                              textAlign: TextAlign.center,
                             ),
-                          ),
-                          SizedBox(height: 8),
-                          Text(
-                            _selectedProduct == '所有产品' 
-                                ? '该客户还没有购买或退货记录'
-                                : '该客户还没有购买或退货 $_selectedProduct 的记录',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.grey[500],
+                            SizedBox(height: 8),
+                            Text(
+                              _selectedProduct == '所有产品' 
+                                  ? '该客户还没有购买或退货记录'
+                                  : '该客户还没有购买或退货 $_selectedProduct 的记录',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey[500],
+                              ),
+                              textAlign: TextAlign.center,
                             ),
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -763,7 +807,7 @@ class _CustomerRecordsScreenState extends State<CustomerRecordsScreen> {
                                   ),
                                   DataCell(
                                     Text(
-                                      '${_netAmount >= 0 ? '+' : ''}¥${_netAmount.toStringAsFixed(2)}',
+                                      '${_netAmount >= 0 ? '+' : '-'}¥${_netAmount.abs().toStringAsFixed(2)}',
                                       style: TextStyle(
                                         color: _netAmount >= 0 ? Colors.green : Colors.red,
                                         fontWeight: FontWeight.bold,
@@ -845,33 +889,94 @@ class _CustomerRecordsScreenState extends State<CustomerRecordsScreen> {
             if (_isSummaryExpanded) ...[
               Divider(height: 16, thickness: 1),
               
-              // 单行横向滚动显示所有汇总信息
-              SingleChildScrollView(
-                controller: _summaryScrollController,
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    SizedBox(width: 8),
-                    _buildSummaryItem('销售记录数', '${_records.length}', Colors.purple),
-                    SizedBox(width: 16),
-                    _buildSummaryItem('购买总量', '+${_formatNumber(_totalPurchaseQuantity)}', Colors.green),
-                    SizedBox(width: 16),
-                    _buildSummaryItem('退货总量', '-${_formatNumber(_totalReturnQuantity)}', Colors.red),
-                    SizedBox(width: 16),
-                    _buildSummaryItem('净数量', '${_netQuantity >= 0 ? '+' : ''}${_formatNumber(_netQuantity)}', _netQuantity >= 0 ? Colors.green : Colors.red),
-                    SizedBox(width: 16),
-                    _buildSummaryItem('购买总额', '+¥${_totalPurchaseAmount.toStringAsFixed(2)}', Colors.green),
-                    SizedBox(width: 16),
-                    _buildSummaryItem('退货总额', '-¥${_totalReturnAmount.toStringAsFixed(2)}', Colors.red),
-                    SizedBox(width: 16),
-                    _buildSummaryItem('净收入', '${_netAmount >= 0 ? '+' : ''}¥${_netAmount.toStringAsFixed(2)}', _netAmount >= 0 ? Colors.green : Colors.red),
-                    SizedBox(width: 8),
-                  ],
-                ),
+              // 单行显示，支持左右滑动
+              Builder(
+                builder: (context) {
+                  // 在布局完成后检查滚动状态
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (_summaryScrollController != null && _summaryScrollController!.hasClients) {
+                      final newMaxExtent = _summaryScrollController!.position.maxScrollExtent;
+                      final newPosition = _summaryScrollController!.offset;
+                      if (newMaxExtent != _summaryScrollMaxExtent || newPosition != _summaryScrollPosition) {
+                        setState(() {
+                          _summaryScrollPosition = newPosition;
+                          _summaryScrollMaxExtent = newMaxExtent;
+                        });
+                      }
+                    }
+                  });
+                  
+                  return SingleChildScrollView(
+                    controller: _summaryScrollController,
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        SizedBox(width: 8),
+                        _buildSummaryItem('总记录数', '$_totalRecordCount', Colors.purple),
+                        SizedBox(width: 16),
+                        _buildSummaryItem('购买记录数', '$_purchaseRecordCount', Colors.green),
+                        SizedBox(width: 16),
+                        _buildSummaryItem('退货记录数', '$_returnRecordCount', Colors.red),
+                        SizedBox(width: 16),
+                        _buildSummaryItem('购买总量', '+${_formatNumber(_totalPurchaseQuantity)}', Colors.green),
+                        SizedBox(width: 16),
+                        _buildSummaryItem('退货总量', '-${_formatNumber(_totalReturnQuantity)}', Colors.red),
+                        SizedBox(width: 16),
+                        _buildSummaryItem('净数量', '${_netQuantity >= 0 ? '+' : ''}${_formatNumber(_netQuantity)}', _netQuantity >= 0 ? Colors.green : Colors.red),
+                        SizedBox(width: 16),
+                        _buildSummaryItem('购买总额', '+¥${_totalPurchaseAmount.toStringAsFixed(2)}', Colors.green),
+                        SizedBox(width: 16),
+                        _buildSummaryItem('退货总额', '-¥${_totalReturnAmount.toStringAsFixed(2)}', Colors.red),
+                        SizedBox(width: 16),
+                        _buildSummaryItem('净销售额', '${_netAmount >= 0 ? '+' : '-'}¥${_netAmount.abs().toStringAsFixed(2)}', _netAmount >= 0 ? Colors.green : Colors.red),
+                        SizedBox(width: 8),
+                      ],
+                    ),
+                  );
+                },
               ),
               
-              // 滚动位置指示器
-              _buildScrollIndicator(),
+              // 滚动指示器
+              SizedBox(height: 8),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final containerWidth = constraints.maxWidth - 24;
+                  // 计算可见区域比例和滚动位置
+                  final visibleRatio = _summaryScrollMaxExtent > 0 
+                      ? containerWidth / (_summaryScrollMaxExtent + containerWidth)
+                      : 0.0; // 如果内容不能滚动，不显示彩色条
+                  final scrollRatio = _summaryScrollMaxExtent > 0 ? _summaryScrollPosition / _summaryScrollMaxExtent : 0.0;
+                  final indicatorLeft = _summaryScrollMaxExtent > 0
+                      ? scrollRatio * (containerWidth - containerWidth * visibleRatio)
+                      : 0.0;
+                  
+                  return Container(
+                    height: 4,
+                    margin: EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(2),
+                      color: Colors.grey[300],
+                    ),
+                    child: Stack(
+                      children: [
+                        // 进度条（显示可见区域）- 只在内容可滚动时显示
+                        if (_summaryScrollMaxExtent > 0)
+                          Positioned(
+                            left: indicatorLeft.clamp(0.0, containerWidth - containerWidth * visibleRatio),
+                            child: Container(
+                              width: containerWidth * visibleRatio,
+                              height: 4,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(2),
+                                color: Colors.orange[700],
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  );
+                },
+              ),
             ],
           ],
         ),
@@ -890,7 +995,7 @@ class _CustomerRecordsScreenState extends State<CustomerRecordsScreen> {
             color: Colors.grey[700],
           ),
         ),
-        SizedBox(height: 6), // 增加名称和数字之间的距离
+        SizedBox(height: 6),
         Text(
           value,
           style: TextStyle(
@@ -900,54 +1005,6 @@ class _CustomerRecordsScreenState extends State<CustomerRecordsScreen> {
           ),
         ),
       ],
-    );
-  }
-  
-  // 滚动位置指示器
-  Widget _buildScrollIndicator() {
-    return AnimatedBuilder(
-      animation: _summaryScrollController,
-      builder: (context, child) {
-        if (!_summaryScrollController.hasClients) {
-          return SizedBox(height: 4);
-        }
-        
-        final position = _summaryScrollController.position;
-        if (position == null || position.maxScrollExtent == 0) {
-          return SizedBox(height: 4);
-        }
-        
-        final scrollRatio = position.pixels / position.maxScrollExtent;
-        final indicatorWidth = MediaQuery.of(context).size.width - 32; // 减去卡片左右边距
-        final thumbWidth = 40.0;
-        final maxLeft = indicatorWidth - thumbWidth;
-        final thumbLeft = scrollRatio * maxLeft;
-        
-        return Container(
-          margin: EdgeInsets.only(top: 8),
-          height: 4,
-          width: indicatorWidth,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(2),
-            color: Colors.grey[300],
-          ),
-          child: Stack(
-            children: [
-              Positioned(
-                left: thumbLeft,
-                child: Container(
-                  width: thumbWidth,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(2),
-                    color: Colors.orange[700],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
     );
   }
 }
