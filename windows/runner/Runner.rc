@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.yikang" "\0"
-            VALUE "FileDescription", "agrisalecl" "\0"
+            VALUE "FileDescription", "AgrisaleCL" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "agrisalecl" "\0"
+            VALUE "InternalName", "AgrisaleCL" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2025 com.yikang. All rights reserved." "\0"
             VALUE "OriginalFilename", "agrisalecl.exe" "\0"
-            VALUE "ProductName", "agrisalecl" "\0"
+            VALUE "ProductName", "AgrisaleCL" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

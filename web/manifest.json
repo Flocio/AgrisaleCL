@@ -1,11 +1,11 @@
 {
-    "name": "agrisalecl",
-    "short_name": "agrisalecl",
+    "name": "AgrisaleCL",
+    "short_name": "AgrisaleCL",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project agrisalecl.",
+    "description": "A new Flutter project AgrisaleCL.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
