@@ -863,8 +863,8 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                                       '数量: ${purchase.quantity >= 0 ? '' : '-'}${_formatNumber(purchase.quantity.abs())} ${product.unit.value}',
                                       style: TextStyle(
                                         fontSize: 13,
-                                        color: purchase.quantity >= 0 ? Colors.black87 : Colors.red[700],
-                                        fontWeight: purchase.quantity >= 0 ? FontWeight.normal : FontWeight.bold,
+                                        color: Colors.black87,
+                                        fontWeight: FontWeight.normal,
                                       ),
                                     ),
                                   ],
@@ -889,15 +889,14 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                                       children: [
                                         Icon(Icons.note, 
                                              size: 14, 
-                                             color: Colors.grey[600]),
+                                             color: Colors.purple),
                                         SizedBox(width: 4),
                                         Expanded(
                                           child: Text(
                                             '备注: ${purchase.note}',
                                             style: TextStyle(
-                                              fontSize: 12,
-                                              color: Colors.grey[700],
-                                              fontStyle: FontStyle.italic,
+                                              fontSize: 13,
+                                              color: Colors.black87,
                                             ),
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
@@ -1145,6 +1144,11 @@ class _PurchaseDialogState extends State<PurchaseDialog> {
   @override
   Widget build(BuildContext context) {
     String unit = '';
+    final int? selectedSupplierId = int.tryParse(_selectedSupplier ?? '');
+    final List<Product> filteredProducts = selectedSupplierId != null
+        ? widget.products.where((p) => p.supplierId == selectedSupplierId).toList()
+        : widget.products;
+
     if (_selectedProduct != null) {
       final product = widget.products.firstWhere((p) => p.name == _selectedProduct);
       unit = product.unit.value;
@@ -1162,6 +1166,49 @@ class _PurchaseDialogState extends State<PurchaseDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // 先选择供应商（可手动选择）
+            DropdownButtonFormField<String>(
+              value: _selectedSupplier,
+              decoration: InputDecoration(
+                labelText: '选择供应商',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                filled: true,
+                fillColor: Colors.grey[50],
+                prefixIcon: Icon(Icons.business, color: Colors.green),
+              ),
+              isExpanded: true,
+              items: widget.suppliers.map((supplier) {
+                return DropdownMenuItem<String>(
+                  value: supplier.id.toString(),
+                  child: Text(supplier.name),
+                );
+              }).toList(),
+              validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return '请选择供应商';
+                }
+                return null;
+              },
+              onChanged: (value) {
+                setState(() {
+                  _selectedSupplier = value;
+
+                  // 如果当前已选产品不属于该供应商，则清空产品选择
+                  if (_selectedProduct != null) {
+                    final p = widget.products.firstWhere((p) => p.name == _selectedProduct);
+                    final sid = p.supplierId;
+                    final selectedSid = int.tryParse(_selectedSupplier ?? '');
+                    if (selectedSid != null && sid != selectedSid) {
+                      _selectedProduct = null;
+                    }
+                  }
+                });
+              },
+            ),
+            SizedBox(height: 16),
+
             DropdownButtonFormField<String>(
               value: _selectedProduct,
                 decoration: InputDecoration(
@@ -1174,7 +1221,7 @@ class _PurchaseDialogState extends State<PurchaseDialog> {
                   prefixIcon: Icon(Icons.inventory, color: Colors.green),
                 ),
                 isExpanded: true,
-              items: widget.products.map((product) {
+              items: filteredProducts.map((product) {
                 return DropdownMenuItem<String>(
                   value: product.name,
                   child: Text(product.name),
@@ -1189,13 +1236,11 @@ class _PurchaseDialogState extends State<PurchaseDialog> {
               onChanged: (value) {
                 setState(() {
                   _selectedProduct = value;
-                  // 自动填充产品对应的供应商
-                  if (value != null) {
+                  // 如果用户还没选供应商，则根据产品自动同步供应商（保持原功能）
+                  if (_selectedSupplier == null && value != null) {
                     final product = widget.products.firstWhere((p) => p.name == value);
                     if (product.supplierId != null && product.supplierId != 0) {
                       _selectedSupplier = product.supplierId.toString();
-                    } else {
-                      _selectedSupplier = null;
                     }
                   }
                 });
@@ -1203,157 +1248,7 @@ class _PurchaseDialogState extends State<PurchaseDialog> {
             ),
               SizedBox(height: 16),
               
-            // 供应商显示（只读，自动从产品获取）
-            Container(
-              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-              decoration: BoxDecoration(
-                color: Colors.blue[50],
-                    borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.blue[200]!),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.business, color: Colors.blue[700], size: 20),
-                  SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '供应商',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                        SizedBox(height: 4),
-                        Text(
-                          _selectedSupplier != null 
-                              ? widget.suppliers.firstWhere(
-                                  (s) => s.id.toString() == _selectedSupplier,
-                                  orElse: () => Supplier(id: -1, userId: 0, name: '未知供应商'),
-                                ).name
-                              : '未分配供应商',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: _selectedSupplier != null ? Colors.blue[900] : Colors.grey[600],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Icon(Icons.info_outline, color: Colors.blue[400], size: 16),
-                ],
-              ),
-            ),
-              SizedBox(height: 16),
-              
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: TextFormField(
-              controller: _quantityController,
-                      decoration: InputDecoration(
-                        labelText: '数量',
-                        helperText: unit.isNotEmpty ? '单位: $unit，负数表示退货' : '负数表示退货',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        filled: true,
-                        fillColor: Colors.grey[50],
-                        prefixIcon: Icon(Icons.format_list_numbered, color: Colors.green),
-                      ),
-                      keyboardType: TextInputType.numberWithOptions(decimal: true, signed: true),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return '请输入数量';
-                        }
-                        if (double.tryParse(value) == null) {
-                          return '请输入有效数字';
-                        }
-                        if (double.parse(value) == 0) {
-                          return '数量不能为0';
-                        }
-                        return null;
-                      },
-              onChanged: (value) => _calculateTotalPrice(),
-            ),
-                  ),
-                  SizedBox(width: 12),
-                  Expanded(
-                    child: TextFormField(
-              controller: _purchasePriceController,
-                      decoration: InputDecoration(
-                        labelText: '进价',
-                        helperText: unit.isNotEmpty ? '元/$unit' : '元/单位',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        filled: true,
-                        fillColor: Colors.grey[50],
-                        prefixIcon: Icon(Icons.attach_money, color: Colors.green),
-                      ),
-                      keyboardType: TextInputType.numberWithOptions(decimal: true),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return '请输入进价';
-                        }
-                        if (double.tryParse(value) == null) {
-                          return '请输入有效数字';
-                        }
-                        if (double.parse(value) < 0) {
-                          return '进价不能为负数';
-                        }
-                        return null;
-                      },
-              onChanged: (value) => _calculateTotalPrice(),
-            ),
-                  ),
-                ],
-              ),
-              SizedBox(height: 16),
-              
-              TextFormField(
-              controller: _noteController,
-                decoration: InputDecoration(
-                  labelText: '备注',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  filled: true,
-                  fillColor: Colors.grey[50],
-                  prefixIcon: Icon(Icons.note, color: Colors.green),
-                ),
-                maxLines: 2,
-            ),
-              SizedBox(height: 16),
-              
-              InkWell(
-                onTap: () => _selectDate(context),
-                child: InputDecorator(
-                  decoration: InputDecoration(
-                    labelText: '采购日期',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    filled: true,
-                    fillColor: Colors.grey[50],
-                    prefixIcon: Icon(Icons.calendar_today, color: Colors.green),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                      Text(DateFormat('yyyy-MM-dd').format(_selectedDate)),
-                      Icon(Icons.arrow_drop_down),
-                    ],
-                  ),
-                ),
-              ),
-              SizedBox(height: 16),
-              
-              // 添加说明信息
+              // 说明信息（放在供应商和数量/进价之间）
               Container(
                 padding: EdgeInsets.all(8),
                 decoration: BoxDecoration(
@@ -1379,6 +1274,100 @@ class _PurchaseDialogState extends State<PurchaseDialog> {
               ),
               SizedBox(height: 16),
               
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        TextFormField(
+                          controller: _quantityController,
+                          decoration: InputDecoration(
+                            labelText: '数量',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            filled: true,
+                            fillColor: Colors.grey[50],
+                            prefixIcon: Icon(Icons.format_list_numbered, color: Colors.green),
+                          ),
+                          keyboardType: TextInputType.numberWithOptions(decimal: true, signed: true),
+                          validator: (value) {
+                            if (value == null || value.isEmpty) {
+                              return '请输入数量';
+                            }
+                            if (double.tryParse(value) == null) {
+                              return '请输入有效数字';
+                            }
+                            if (double.parse(value) == 0) {
+                              return '数量不能为0';
+                            }
+                            return null;
+                          },
+                          onChanged: (value) => _calculateTotalPrice(),
+                        ),
+                        SizedBox(height: 4),
+                        Center(
+                          child: Text(
+                            unit.isNotEmpty ? '单位: $unit' : '单位:',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.black87,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        TextFormField(
+                          controller: _purchasePriceController,
+                          decoration: InputDecoration(
+                            labelText: '进价',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            filled: true,
+                            fillColor: Colors.grey[50],
+                            prefixIcon: Icon(Icons.attach_money, color: Colors.green),
+                          ),
+                          keyboardType: TextInputType.numberWithOptions(decimal: true),
+                          validator: (value) {
+                            if (value == null || value.isEmpty) {
+                              return '请输入进价';
+                            }
+                            if (double.tryParse(value) == null) {
+                              return '请输入有效数字';
+                            }
+                            if (double.parse(value) < 0) {
+                              return '进价不能为负数';
+                            }
+                            return null;
+                          },
+                          onChanged: (value) => _calculateTotalPrice(),
+                        ),
+                        SizedBox(height: 4),
+                        Center(
+                          child: Text(
+                            unit.isNotEmpty ? '元 / $unit' : '元 / 单位',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.black87,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: 16),
+              
               Container(
                 width: double.infinity,
                 padding: EdgeInsets.all(12),
@@ -1397,7 +1386,9 @@ class _PurchaseDialogState extends State<PurchaseDialog> {
                       ),
                     ),
                     Text(
-                      '¥ $_totalPurchasePrice',
+                      _totalPurchasePrice < 0
+                          ? '-¥${_totalPurchasePrice.abs()}'
+                          : '¥$_totalPurchasePrice',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 18,
@@ -1405,6 +1396,44 @@ class _PurchaseDialogState extends State<PurchaseDialog> {
                 ),
               ],
             ),
+              ),
+              SizedBox(height: 16),
+              
+              InkWell(
+                onTap: () => _selectDate(context),
+                child: InputDecorator(
+                  decoration: InputDecoration(
+                    labelText: '采购日期',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    filled: true,
+                    fillColor: Colors.grey[50],
+                    prefixIcon: Icon(Icons.calendar_today, color: Colors.green),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(DateFormat('yyyy-MM-dd').format(_selectedDate)),
+                      Icon(Icons.arrow_drop_down),
+                    ],
+                  ),
+                ),
+              ),
+              SizedBox(height: 16),
+              
+              TextFormField(
+                controller: _noteController,
+                decoration: InputDecoration(
+                  labelText: '备注',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  filled: true,
+                  fillColor: Colors.grey[50],
+                  prefixIcon: Icon(Icons.note, color: Colors.green),
+                ),
+                maxLines: 2,
               ),
           ],
           ),
@@ -1420,6 +1449,32 @@ class _PurchaseDialogState extends State<PurchaseDialog> {
             TextButton(
               onPressed: () {
                 if (_formKey.currentState!.validate()) {
+                  // 额外健壮性校验：产品与供应商必须匹配（每个产品只对应一个供应商）
+                  if (_selectedProduct != null && _selectedSupplier != null) {
+                    final product = widget.products.firstWhere((p) => p.name == _selectedProduct);
+                    final selectedSupplierId = int.tryParse(_selectedSupplier!);
+                    final productSupplierId = product.supplierId;
+
+                    if (selectedSupplierId == null ||
+                        productSupplierId == null ||
+                        productSupplierId != selectedSupplierId) {
+                      showDialog(
+                        context: context,
+                        builder: (context) => AlertDialog(
+                          title: Text('保存失败'),
+                          content: Text('所选产品与供应商不匹配，请重新选择。'),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.of(context).pop(),
+                              child: Text('确定'),
+                            ),
+                          ],
+                        ),
+                      );
+                      return;
+                    }
+                  }
+
                 final purchase = {
                   'productName': _selectedProduct,
                   'quantity': double.tryParse(_quantityController.text) ?? 0.0,
