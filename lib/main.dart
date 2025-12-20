@@ -32,6 +32,7 @@ import 'screens/auto_backup_list_screen.dart';
 import 'screens/server_config_screen.dart';
 import 'screens/version_info_screen.dart';
 import 'screens/model_settings_screen.dart';
+import 'screens/help_screen.dart';
 import 'services/api_service.dart';
 import 'services/auth_service.dart';
 import 'services/auto_backup_service.dart';
@@ -215,6 +216,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         '/server_config': (context) => ServerConfigScreen(),
         '/version_info': (context) => VersionInfoScreen(),
         '/model_settings': (context) => ModelSettingsScreen(),
+        '/help': (context) => HelpScreen(),
       },
     );
   }

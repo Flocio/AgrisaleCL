@@ -26,7 +26,8 @@ from server.routers import (
     employees,
     income,
     remittance,
-    settings
+    settings,
+    help
 )
 
 # 配置日志
@@ -129,6 +130,7 @@ app.include_router(employees.router)
 app.include_router(income.router)
 app.include_router(remittance.router)
 app.include_router(settings.router)
+app.include_router(help.router)
 
 logger.info("所有路由已注册")
 

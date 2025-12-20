@@ -305,6 +305,15 @@ class _VersionInfoScreenState extends State<VersionInfoScreen> {
                           ),
                           Divider(),
                           ListTile(
+                            leading: Icon(Icons.help_outline, color: Colors.green),
+                            title: Text('帮助文档'),
+                            trailing: Icon(Icons.arrow_forward_ios, size: 16),
+                            onTap: () {
+                              Navigator.pushNamed(context, '/help');
+                            },
+                          ),
+                          Divider(),
+                          ListTile(
                             leading: Icon(Icons.info_outline, color: Colors.blue),
                             title: Text('系统信息'),
                             subtitle: Text('AgrisaleCL v${_packageInfo!.version}'),
