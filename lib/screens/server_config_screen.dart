@@ -17,23 +17,26 @@ class ServerConfigScreen extends StatefulWidget {
 class _ServerConfigScreenState extends State<ServerConfigScreen> {
   final _formKey = GlobalKey<FormState>();
   final _serverUrlController = TextEditingController();
+  final _lanUrlController = TextEditingController(); // 局域网地址控制器
   bool _isLoading = false;
   bool _isTesting = false;
   String? _testResult;
   String? _currentServerUrl;
   String? _selectedQuickConfig; // 当前选中的快速配置选项
+  int? _testDuration; // 测试连接耗时（毫秒）
 
   @override
   void initState() {
     super.initState();
     _loadCurrentServerUrl();
+    _loadLanUrl();
     // 监听输入框变化，实时更新快速配置选中状态
     _serverUrlController.addListener(() {
       final currentText = _serverUrlController.text.trim();
       String? newSelected;
       if (currentText == 'https://agrisalecl.drflo.org') {
         newSelected = 'https';
-      } else if (currentText == 'http://192.168.10.12:8000') {
+      } else if (currentText == _lanUrlController.text.trim()) {
         newSelected = 'lan';
       } else {
         newSelected = null;
@@ -45,12 +48,34 @@ class _ServerConfigScreenState extends State<ServerConfigScreen> {
         });
       }
     });
+    // 监听局域网地址变化，实时更新说明卡片
+    _lanUrlController.addListener(() {
+      setState(() {
+        // 触发重建以更新说明卡片中的局域网地址显示
+      });
+    });
   }
 
   @override
   void dispose() {
     _serverUrlController.dispose();
+    _lanUrlController.dispose();
     super.dispose();
+  }
+  
+  // 加载局域网地址
+  Future<void> _loadLanUrl() async {
+    final prefs = await SharedPreferences.getInstance();
+    final lanUrl = prefs.getString('lan_url') ?? 'http://192.168.10.12:8000';
+    setState(() {
+      _lanUrlController.text = lanUrl;
+    });
+  }
+  
+  // 保存局域网地址
+  Future<void> _saveLanUrl() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('lan_url', _lanUrlController.text.trim());
   }
 
   // 加载当前服务器地址
@@ -73,7 +98,7 @@ class _ServerConfigScreenState extends State<ServerConfigScreen> {
     final trimmedUrl = url.trim();
     if (trimmedUrl == 'https://agrisalecl.drflo.org') {
       _selectedQuickConfig = 'https';
-    } else if (trimmedUrl == 'http://192.168.10.12:8000') {
+    } else if (trimmedUrl == _lanUrlController.text.trim()) {
       _selectedQuickConfig = 'lan';
     } else {
       _selectedQuickConfig = null;
@@ -89,8 +114,11 @@ class _ServerConfigScreenState extends State<ServerConfigScreen> {
     setState(() {
       _isTesting = true;
       _testResult = null;
+      _testDuration = null;
     });
 
+    final startTime = DateTime.now();
+    
     try {
       final testUrl = _serverUrlController.text.trim();
       
@@ -103,6 +131,9 @@ class _ServerConfigScreenState extends State<ServerConfigScreen> {
         },
       ).timeout(Duration(seconds: 10));
       
+      final endTime = DateTime.now();
+      final duration = endTime.difference(startTime).inMilliseconds;
+      
       if (response.statusCode == 200) {
         try {
           final json = jsonDecode(response.body) as Map<String, dynamic>;
@@ -111,42 +142,59 @@ class _ServerConfigScreenState extends State<ServerConfigScreen> {
           if (status == 'healthy') {
             setState(() {
               _testResult = '连接成功！服务器运行正常';
+              _testDuration = duration;
             });
           } else {
             setState(() {
               _testResult = '连接成功，但服务器状态异常：$status';
+              _testDuration = duration;
             });
           }
         } catch (e) {
           // 如果响应不是 JSON，但状态码是 200，也算成功
           setState(() {
             _testResult = '连接成功！服务器响应正常（状态码：${response.statusCode}）';
+            _testDuration = duration;
           });
         }
       } else if (response.statusCode == 503) {
         setState(() {
           _testResult = '连接成功，但服务器健康检查失败（数据库可能未连接）';
+          _testDuration = duration;
         });
       } else {
         setState(() {
           _testResult = '连接失败：服务器返回错误（状态码：${response.statusCode}）';
+          _testDuration = duration;
         });
       }
     } on TimeoutException {
+      final endTime = DateTime.now();
+      final duration = endTime.difference(startTime).inMilliseconds;
       setState(() {
         _testResult = '连接失败：请求超时，请检查服务器地址和网络连接';
+        _testDuration = duration;
       });
     } on SocketException catch (e) {
+      final endTime = DateTime.now();
+      final duration = endTime.difference(startTime).inMilliseconds;
       setState(() {
         _testResult = '连接失败：无法连接到服务器，请检查：\n1. 服务器地址是否正确\n2. 是否与服务器在同一网络（内网）\n3. 防火墙是否阻止连接';
+        _testDuration = duration;
       });
     } on FormatException catch (e) {
+      final endTime = DateTime.now();
+      final duration = endTime.difference(startTime).inMilliseconds;
       setState(() {
         _testResult = '连接失败：服务器地址格式不正确';
+        _testDuration = duration;
       });
     } catch (e) {
+      final endTime = DateTime.now();
+      final duration = endTime.difference(startTime).inMilliseconds;
       setState(() {
         _testResult = '连接失败：${e.toString()}';
+        _testDuration = duration;
       });
     } finally {
       setState(() {
@@ -281,12 +329,12 @@ class _ServerConfigScreenState extends State<ServerConfigScreen> {
                     ),
                     SizedBox(height: 12),
                     Text(
-                      '• HTTPS 地址：https://agrisalecl.drflo.org（内网穿透）',
+                      '• HTTPS 地址：https://agrisalecl.drflo.org（内网穿透，不可修改）',
                       style: TextStyle(fontSize: 13, color: Colors.blue[800]),
                     ),
                     SizedBox(height: 6),
                     Text(
-                      '• 局域网地址：http://192.168.10.12:8000（同一WiFi下）',
+                      '• 局域网地址：${_lanUrlController.text.trim()}（同一WiFi下，可在快速配置中修改）',
                       style: TextStyle(fontSize: 13, color: Colors.blue[800]),
                     ),
                     SizedBox(height: 6),
@@ -324,14 +372,19 @@ class _ServerConfigScreenState extends State<ServerConfigScreen> {
                   borderRadius: BorderRadius.circular(24),
                   border: Border.all(color: Colors.grey[200]!, style: BorderStyle.solid, width: 1),
                 ),
-                child: TextField(
-                  controller: TextEditingController(text: _currentServerUrl),
-                  enabled: false,
-                  decoration: InputDecoration(
-                    border: InputBorder.none,
-                    contentPadding: EdgeInsets.symmetric(vertical: 12, horizontal: 0),
-                  ),
-                  style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(vertical: 12, horizontal: 0),
+                        child: Text(
+                          _currentServerUrl!,
+                          style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+                        ),
+                      ),
+                    ),
+                    Icon(Icons.lock, size: 18, color: Colors.grey[400]),
+                  ],
                 ),
               ),
               SizedBox(height: 24),
@@ -339,7 +392,7 @@ class _ServerConfigScreenState extends State<ServerConfigScreen> {
             
             // 服务器地址输入
             Text(
-              '服务器地址',
+              '修改服务器地址',
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.bold,
@@ -347,30 +400,25 @@ class _ServerConfigScreenState extends State<ServerConfigScreen> {
               ),
             ),
             SizedBox(height: 8),
-            TextFormField(
-              controller: _serverUrlController,
-              style: TextStyle(fontSize: 16, color: Colors.grey[800]),
-              decoration: InputDecoration(
-                hintText: 'https://agrisalecl.drflo.org',
-                contentPadding: EdgeInsets.symmetric(vertical: 0, horizontal: 16),
-                filled: true,
-                fillColor: Colors.grey[100],
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(24),
-                  borderSide: BorderSide(color: Colors.grey[300]!),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(24),
-                  borderSide: BorderSide(color: Colors.grey[300]!),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(24),
-                  borderSide: BorderSide(color: Colors.green),
-                ),
+            Container(
+              padding: EdgeInsets.symmetric(vertical: 0, horizontal: 16),
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: Colors.grey[300]!, style: BorderStyle.solid, width: 1),
               ),
-              keyboardType: TextInputType.url,
-              validator: _validateUrl,
-              enabled: !_isLoading && !_isTesting,
+              child: TextFormField(
+                controller: _serverUrlController,
+                style: TextStyle(fontSize: 16, color: Colors.grey[800]),
+                decoration: InputDecoration(
+                  hintText: 'https://agrisalecl.drflo.org',
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.symmetric(vertical: 12, horizontal: 0),
+                ),
+                keyboardType: TextInputType.url,
+                validator: _validateUrl,
+                enabled: !_isLoading && !_isTesting,
+              ),
             ),
             
             SizedBox(height: 16),
@@ -430,7 +478,7 @@ class _ServerConfigScreenState extends State<ServerConfigScreen> {
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        _testResult!,
+                        _testResult! + (_testDuration != null ? ' (${(_testDuration! / 1000).toStringAsFixed(1)}s)' : ''),
                         style: TextStyle(
                           fontSize: 13,
                           color: _testResult!.contains('成功')
@@ -473,7 +521,7 @@ class _ServerConfigScreenState extends State<ServerConfigScreen> {
             
             SizedBox(height: 16),
             
-            // 快速配置按钮
+            // 快速配置
             Text(
               '快速配置',
               style: TextStyle(
@@ -483,35 +531,103 @@ class _ServerConfigScreenState extends State<ServerConfigScreen> {
               ),
             ),
             SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
+            
+            // HTTPS 配置
+            Row(
               children: [
-                ActionChip(
-                  label: Text('HTTPS'),
-                  onPressed: () {
-                    setState(() {
-                      _serverUrlController.text = 'https://agrisalecl.drflo.org';
-                      _selectedQuickConfig = 'https';
-                    });
-                  },
-                  avatar: Icon(Icons.lock, size: 18),
-                  backgroundColor: _selectedQuickConfig == 'https' 
-                      ? Colors.green[100] 
-                      : null,
+                SizedBox(
+                  width: 110,
+                  child: ActionChip(
+                    label: Text('HTTPS'),
+                    onPressed: () {
+                      setState(() {
+                        _serverUrlController.text = 'https://agrisalecl.drflo.org';
+                        _selectedQuickConfig = 'https';
+                      });
+                    },
+                    avatar: Icon(Icons.lock, size: 18),
+                    backgroundColor: _selectedQuickConfig == 'https' 
+                        ? Colors.green[100] 
+                        : null,
+                    labelPadding: EdgeInsets.symmetric(horizontal: 4),
+                  ),
                 ),
-                ActionChip(
-                  label: Text('局域网'),
-                  onPressed: () {
-                    setState(() {
-                    _serverUrlController.text = 'http://192.168.10.12:8000';
-                      _selectedQuickConfig = 'lan';
-                    });
-                  },
-                  avatar: Icon(Icons.home, size: 18),
-                  backgroundColor: _selectedQuickConfig == 'lan' 
-                      ? Colors.green[100] 
-                      : null,
+                SizedBox(width: 8),
+                Expanded(
+                  child: Container(
+                    padding: EdgeInsets.symmetric(vertical: 0, horizontal: 16),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[50],
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(color: Colors.grey[200]!, style: BorderStyle.solid, width: 1),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(vertical: 12, horizontal: 0),
+                            child: Text(
+                              'https://agrisalecl.drflo.org',
+                              style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+                            ),
+                          ),
+                        ),
+                        Icon(Icons.lock, size: 18, color: Colors.grey[400]),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            
+            SizedBox(height: 12),
+            
+            // 局域网配置
+            Row(
+              children: [
+                SizedBox(
+                  width: 110,
+                  child: ActionChip(
+                    label: Text('局域网'),
+                    onPressed: () {
+                      setState(() {
+                        _serverUrlController.text = _lanUrlController.text.trim();
+                        _selectedQuickConfig = 'lan';
+                      });
+                    },
+                    avatar: Icon(Icons.home, size: 18),
+                    backgroundColor: _selectedQuickConfig == 'lan' 
+                        ? Colors.green[100] 
+                        : null,
+                    labelPadding: EdgeInsets.symmetric(horizontal: 4),
+                  ),
+                ),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Container(
+                    padding: EdgeInsets.symmetric(vertical: 0, horizontal: 16),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[100],
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(color: Colors.grey[300]!, style: BorderStyle.solid, width: 1),
+                    ),
+                    child: TextFormField(
+                      controller: _lanUrlController,
+                      style: TextStyle(fontSize: 16, color: Colors.grey[800]),
+                      decoration: InputDecoration(
+                        hintText: 'http://192.168.10.12:8000',
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.symmetric(vertical: 12, horizontal: 0),
+                      ),
+                      keyboardType: TextInputType.url,
+                      validator: _validateUrl,
+                      enabled: !_isLoading && !_isTesting,
+                      onChanged: (value) {
+                        // 当局域网地址改变时，自动保存
+                        _saveLanUrl();
+                      },
+                    ),
+                  ),
                 ),
               ],
             ),

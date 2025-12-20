@@ -374,9 +374,9 @@ class ApiService {
       urlsToTry.add(httpsUrl);
     }
     
-    // 3. 局域网地址
-    const lanUrl = 'http://192.168.10.12:8000';
-    if (!urlsToTry.contains(lanUrl)) {
+    // 3. 局域网地址（从配置读取，如果没有配置则使用默认值）
+    final lanUrl = prefs.getString('lan_url') ?? 'http://192.168.10.12:8000';
+    if (lanUrl.isNotEmpty && !urlsToTry.contains(lanUrl)) {
       urlsToTry.add(lanUrl);
     }
     
