@@ -339,7 +339,7 @@ class _SupplierRecordsScreenState extends State<SupplierRecordsScreen> {
       context: context,
       csvData: csv,
       baseFileName: baseFileName,
-    );
+      );
   }
 
   void _toggleSortOrder() {
@@ -545,7 +545,7 @@ class _SupplierRecordsScreenState extends State<SupplierRecordsScreen> {
                         ? widget.supplierName[0].toUpperCase() 
                         : '?',
                     style: TextStyle(
-                      color: Colors.blue[800],
+                    color: Colors.blue[800],
                       fontWeight: FontWeight.bold,
                       fontSize: 14,
                     ),
@@ -714,27 +714,27 @@ class _SupplierRecordsScreenState extends State<SupplierRecordsScreen> {
                                     ),
                                   ),
                                 ),
-                                DataCell(Text(purchase['unit'] ?? '')),
-                                DataCell(
-                                  Text(
+                  DataCell(Text(purchase['unit'] ?? '')),
+                            DataCell(
+                              Text(
                                     amountText,
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
                                       color: textColor,
-                                    ),
+                                ),
                                   ),
-                                ),
-                                DataCell(
-                                  purchase['note'] != null && purchase['note'].toString().isNotEmpty
-                                      ? Text(
-                                          purchase['note'],
-                                          style: TextStyle(
-                                            fontStyle: FontStyle.italic,
-                                            color: Colors.grey[700],
-                                          ),
-                                        )
-                                      : Text(''),
-                                ),
+                            ),
+                            DataCell(
+                              purchase['note'] != null && purchase['note'].toString().isNotEmpty
+                                  ? Text(
+                                      purchase['note'],
+                                      style: TextStyle(
+                                        fontStyle: FontStyle.italic,
+                                        color: Colors.grey[700],
+                                      ),
+                                    )
+                                  : Text(''),
+                            ),
                               ]);
                             }).toList(),
                             
@@ -886,7 +886,7 @@ class _SupplierRecordsScreenState extends State<SupplierRecordsScreen> {
                     controller: _summaryScrollController,
                     scrollDirection: Axis.horizontal,
                     child: Row(
-                      children: [
+                children: [
                         SizedBox(width: 8),
                         _buildSummaryItem('总记录数', '$_totalRecordCount', Colors.purple),
                         SizedBox(width: 16),
@@ -906,8 +906,8 @@ class _SupplierRecordsScreenState extends State<SupplierRecordsScreen> {
                         SizedBox(width: 16),
                         _buildSummaryItem('净采购额', '${_netAmount >= 0 ? '+' : '-'}¥${_netAmount.abs().toStringAsFixed(2)}', _netAmount >= 0 ? Colors.green : Colors.red),
                         SizedBox(width: 8),
-                      ],
-                    ),
+                ],
+              ),
                   );
                 },
               ),
@@ -934,7 +934,7 @@ class _SupplierRecordsScreenState extends State<SupplierRecordsScreen> {
                       color: Colors.grey[300],
                     ),
                     child: Stack(
-                      children: [
+                children: [
                         // 进度条（显示可见区域）- 只在内容可滚动时显示
                         if (_summaryScrollMaxExtent > 0)
                           Positioned(
@@ -948,7 +948,7 @@ class _SupplierRecordsScreenState extends State<SupplierRecordsScreen> {
                               ),
                             ),
                           ),
-                      ],
+                ],
                     ),
                   );
                 },

@@ -547,6 +547,7 @@ class OnlineUserUpdate(BaseModel):
     device_id: Optional[str] = Field(None, max_length=100, description="设备ID（用于区分同一用户的不同设备）")
     current_action: Optional[str] = Field(None, max_length=200, description="当前操作描述")
     platform: Optional[str] = Field(None, max_length=50, description="设备平台（如：Android、iOS、macOS、Windows、Linux）")
+    device_name: Optional[str] = Field(None, max_length=200, description="设备名称（如：iPhone 14 Pro、MacBook Pro等）")
 
 
 class OnlineUserResponse(BaseModel):
@@ -557,6 +558,7 @@ class OnlineUserResponse(BaseModel):
     last_heartbeat: str
     current_action: Optional[str] = None
     platform: Optional[str] = None
+    device_name: Optional[str] = None
 
     model_config = {"from_attributes": True}
 

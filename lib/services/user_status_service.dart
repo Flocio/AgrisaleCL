@@ -4,6 +4,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 import '../models/api_response.dart';
 import '../models/api_error.dart';
 import 'api_service.dart';
@@ -16,6 +17,7 @@ class OnlineUser {
   final String lastHeartbeat;
   final String? currentAction;
   final String? platform;
+  final String? deviceName;
 
   OnlineUser({
     required this.userId,
@@ -24,6 +26,7 @@ class OnlineUser {
     required this.lastHeartbeat,
     this.currentAction,
     this.platform,
+    this.deviceName,
   });
 
   factory OnlineUser.fromJson(Map<String, dynamic> json) {
@@ -34,6 +37,7 @@ class OnlineUser {
       lastHeartbeat: json['last_heartbeat'] as String? ?? json['lastHeartbeat'] as String,
       currentAction: json['current_action'] as String? ?? json['currentAction'] as String?,
       platform: json['platform'] as String?,
+      deviceName: json['device_name'] as String?,
     );
   }
 
@@ -185,6 +189,48 @@ class UserStatusService {
     }
   }
 
+  /// 获取设备名称
+  Future<String?> _getDeviceName() async {
+    try {
+      final deviceInfo = DeviceInfoPlugin();
+      
+      if (Platform.isAndroid) {
+        final androidInfo = await deviceInfo.androidInfo;
+        // 返回设备型号和制造商，例如：Samsung Galaxy S21
+        return '${androidInfo.manufacturer} ${androidInfo.model}';
+      } else if (Platform.isIOS) {
+        final iosInfo = await deviceInfo.iosInfo;
+        // 返回设备名称，例如：iPhone 14 Pro
+        return iosInfo.name.isNotEmpty ? iosInfo.name : iosInfo.model;
+      } else if (Platform.isMacOS) {
+        final macInfo = await deviceInfo.macOsInfo;
+        // 返回设备名称，优先使用 computerName，然后是 hostName，最后是 model
+        if (macInfo.computerName.isNotEmpty) {
+          return macInfo.computerName;
+        } else if (macInfo.hostName.isNotEmpty) {
+          return macInfo.hostName;
+        } else if (macInfo.model.isNotEmpty) {
+          return macInfo.model;
+        } else {
+          return 'Mac';
+        }
+      } else if (Platform.isWindows) {
+        final windowsInfo = await deviceInfo.windowsInfo;
+        // 返回计算机名称
+        return windowsInfo.computerName;
+      } else if (Platform.isLinux) {
+        final linuxInfo = await deviceInfo.linuxInfo;
+        // 返回机器ID或主机名
+        return linuxInfo.prettyName.isNotEmpty ? linuxInfo.prettyName : linuxInfo.machineId;
+      } else {
+        return null;
+      }
+    } catch (e) {
+      print('获取设备名称失败: $e');
+      return null;
+    }
+  }
+
   /// 更新心跳
   /// 
   /// [action] 当前操作描述（可选）
@@ -192,9 +238,10 @@ class UserStatusService {
     try {
       _currentAction = action;
       
-      // 获取设备ID和平台信息
+      // 获取设备ID、平台信息和设备名称
       final deviceId = await _getDeviceId();
       final platform = _getPlatform();
+      final deviceName = await _getDeviceName();
       
       await _apiService.post(
         '/api/users/heartbeat',
@@ -202,6 +249,7 @@ class UserStatusService {
           'device_id': deviceId,
           if (action != null) 'current_action': action,
           'platform': platform,
+          if (deviceName != null) 'device_name': deviceName,
         },
         fromJsonT: (json) => json,
       );

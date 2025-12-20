@@ -5,6 +5,7 @@ FastAPI 应用主文件
 
 import logging
 import os
+import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
@@ -79,7 +80,38 @@ async def lifespan(app: FastAPI):
     else:
         logger.warning("⚠️  警告: 使用默认 JWT 密钥，生产环境请设置 SECRET_KEY 环境变量")
     
+    # 启动后台任务：定期清理过期的在线用户
+    async def cleanup_task():
+        """后台任务：定期清理过期的在线用户"""
+        from server.routers.users import _cleanup_expired_users
+        cleanup_interval = 15  # 每15秒清理一次
+        
+        while True:
+            try:
+                await asyncio.sleep(cleanup_interval)
+                pool = get_pool()
+                if pool:
+                    with pool.get_connection() as conn:
+                        deleted_count = _cleanup_expired_users(conn)
+                        if deleted_count > 0:
+                            logger.debug(f"后台清理过期在线用户: 删除了 {deleted_count} 条记录")
+            except Exception as e:
+                logger.error(f"后台清理任务出错: {e}", exc_info=True)
+                # 出错后等待更长时间再重试
+                await asyncio.sleep(60)
+    
+    # 启动后台清理任务
+    cleanup_task_handle = asyncio.create_task(cleanup_task())
+    logger.info("后台清理任务已启动（每15秒清理一次过期在线用户）")
+    
     yield
+    
+    # 停止后台任务
+    cleanup_task_handle.cancel()
+    try:
+        await cleanup_task_handle
+    except asyncio.CancelledError:
+        logger.info("后台清理任务已停止")
     
     # 关闭时执行
     logger.info("正在关闭应用...")

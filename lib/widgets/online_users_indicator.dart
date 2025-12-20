@@ -97,72 +97,10 @@ class _OnlineUsersIndicatorState extends State<OnlineUsersIndicator> {
   void _showOnlineUsersDialog() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text('在线设备 (${_onlineUsersCount})'),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: _onlineUsers.isEmpty
-              ? Center(
-                  child: Text(
-                    '暂无在线设备',
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                )
-              : ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: _onlineUsers.length,
-                  itemBuilder: (context, index) {
-                    final user = _onlineUsers[index];
-                    final platformText = user.platform ?? '未知平台';
-                    final subtitleText = user.currentAction != null
-                        ? user.currentAction!
-                        : '在线';
-                    return ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: Colors.green,
-                        child: Icon(
-                          Icons.devices,
-                          color: Colors.white,
-                          size: 20,
-                        ),
-                      ),
-                      title: Text('设备 ${index + 1}'),
-                      subtitle: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            platformText,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.blue[700],
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          SizedBox(height: 2),
-                          Text(
-                            subtitleText,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey[600],
-                            ),
-                          ),
-                        ],
-                      ),
-                      trailing: Icon(
-                        Icons.circle,
-                        size: 8,
-                        color: Colors.green,
-                      ),
-                    );
-                  },
-                ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('关闭'),
-          ),
-        ],
+      builder: (dialogContext) => _OnlineUsersDialog(
+        initialUsers: _onlineUsers,
+        initialCount: _onlineUsersCount,
+        userStatusService: _userStatusService,
       ),
     );
   }
@@ -254,6 +192,169 @@ class _OnlineUsersIndicatorState extends State<OnlineUsersIndicator> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// 在线设备详情对话框（独立组件，支持自动更新）
+class _OnlineUsersDialog extends StatefulWidget {
+  final List<OnlineUser> initialUsers;
+  final int initialCount;
+  final UserStatusService userStatusService;
+
+  const _OnlineUsersDialog({
+    required this.initialUsers,
+    required this.initialCount,
+    required this.userStatusService,
+  });
+
+  @override
+  _OnlineUsersDialogState createState() => _OnlineUsersDialogState();
+}
+
+class _OnlineUsersDialogState extends State<_OnlineUsersDialog> {
+  late List<OnlineUser> _currentUsers;
+  late int _currentCount;
+  Function(List<OnlineUser>, int)? _updateCallback;
+  Function(List<OnlineUser>, int)? _originalCallback;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentUsers = widget.initialUsers;
+    _currentCount = widget.initialCount;
+
+    // 保存原来的回调
+    _originalCallback = widget.userStatusService.onOnlineUsersUpdated;
+
+    // 创建新的回调，同时更新对话框和原来的回调
+    _updateCallback = (users, count) {
+      if (mounted) {
+        setState(() {
+          _currentUsers = users;
+          _currentCount = count;
+        });
+      }
+      // 同时调用原来的回调（如果有）
+      if (_originalCallback != null) {
+        _originalCallback!(users, count);
+      }
+    };
+
+    // 设置更新回调
+    widget.userStatusService.onOnlineUsersUpdated = _updateCallback;
+  }
+
+  @override
+  void dispose() {
+    // 恢复原来的回调
+    widget.userStatusService.onOnlineUsersUpdated = _originalCallback;
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text('在线设备 ($_currentCount)'),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: _currentUsers.isEmpty
+            ? Center(
+                child: Text(
+                  '暂无在线设备',
+                  style: TextStyle(color: Colors.grey),
+                ),
+              )
+            : ListView.builder(
+                shrinkWrap: true,
+                itemCount: _currentUsers.length,
+                itemBuilder: (context, index) {
+                  final user = _currentUsers[index];
+                  final platformText = user.platform ?? '未知平台';
+                  final subtitleText = user.currentAction != null
+                      ? user.currentAction!
+                      : '在线';
+                    
+                  // 构建设备显示名称
+                  String deviceDisplayName;
+                  String? deviceInfo; // 设备详细信息（平台 + 其他信息）
+                  
+                  if (user.deviceName != null && user.deviceName!.isNotEmpty) {
+                    // 有设备名称，使用设备名称作为标题
+                    deviceDisplayName = user.deviceName!;
+                    deviceInfo = platformText; // 平台信息作为副标题第一行
+                  } else {
+                    // 没有设备名称，使用平台名称作为标题
+                    deviceDisplayName = platformText;
+                    deviceInfo = null; // 不显示额外的设备信息
+                  }
+                  
+                  // 根据平台选择图标
+                  IconData platformIcon;
+                  if (platformText == 'Android' || platformText == 'iOS') {
+                    // 手机端：显示手机图标
+                    platformIcon = Icons.smartphone;
+                  } else if (platformText == 'macOS' || platformText == 'Windows' || platformText == 'Linux') {
+                    // 电脑端：显示电脑图标
+                    platformIcon = Icons.computer;
+                  } else {
+                    // 未知平台：使用默认设备图标
+                    platformIcon = Icons.devices;
+                  }
+                  
+                  return ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: Colors.green,
+                        child: Icon(
+                          platformIcon,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                      ),
+                      title: Text(
+                        deviceDisplayName,
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (deviceInfo != null) ...[
+                            Text(
+                              deviceInfo,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.blue[700],
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            SizedBox(height: 2),
+                          ],
+                          Text(
+                            subtitleText,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                        ],
+                      ),
+                    trailing: Icon(
+                      Icons.circle,
+                      size: 8,
+                      color: Colors.green,
+                    ),
+                  );
+                },
+              ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text('关闭'),
+        ),
+      ],
     );
   }
 }

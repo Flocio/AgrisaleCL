@@ -58,6 +58,7 @@ dependencies:
   flutter_markdown: ^0.6.18
   pdf: ^3.11.1
   printing: ^5.13.3
+  device_info_plus: ^10.1.0
 
 
 dev_dependencies:

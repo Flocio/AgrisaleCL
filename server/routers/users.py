@@ -24,7 +24,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/users", tags=["用户状态"])
 
 # 在线用户超时时间（秒），超过此时间未心跳视为离线
-ONLINE_TIMEOUT_SECONDS = 60  # 1 分钟
+# 设置为心跳间隔的 3 倍（心跳间隔 10 秒，超时 30 秒），确保有足够的容错时间
+ONLINE_TIMEOUT_SECONDS = 30  # 30 秒（约 3 个心跳周期）
 
 
 @router.post("/heartbeat", response_model=BaseResponse)
@@ -51,20 +52,42 @@ async def update_heartbeat(
     # 生成或使用设备ID（如果客户端没有提供，则使用默认值）
     device_id = action_data.device_id if action_data and action_data.device_id else "default"
     platform = action_data.platform if action_data and action_data.platform else None
+    device_name = action_data.device_name if action_data and action_data.device_name else None
     
     try:
         with pool.get_connection() as conn:
             # 更新或插入在线用户记录（支持多设备）
-            conn.execute(
-                """
-                INSERT OR REPLACE INTO online_users (userId, deviceId, username, last_heartbeat, current_action, platform)
-                VALUES (?, ?, ?, datetime('now'), ?, ?)
-                """,
-                (user_id, device_id, username, current_action, platform)
+            # 使用 INSERT OR REPLACE 会替换整行，确保 device_name 也被更新
+            # 注意：SQLite 的 INSERT OR REPLACE 需要所有字段，否则会丢失未指定的字段
+            # 所以我们需要先检查记录是否存在，如果存在则更新，否则插入
+            cursor = conn.execute(
+                "SELECT userId, deviceId FROM online_users WHERE userId = ? AND deviceId = ?",
+                (user_id, device_id)
             )
+            existing = cursor.fetchone()
+            
+            if existing:
+                # 更新现有记录
+                conn.execute(
+                    """
+                    UPDATE online_users 
+                    SET username = ?, last_heartbeat = datetime('now'), current_action = ?, platform = ?, device_name = ?
+                    WHERE userId = ? AND deviceId = ?
+                    """,
+                    (username, current_action, platform, device_name, user_id, device_id)
+                )
+            else:
+                # 插入新记录
+                conn.execute(
+                    """
+                    INSERT INTO online_users (userId, deviceId, username, last_heartbeat, current_action, platform, device_name)
+                    VALUES (?, ?, ?, datetime('now'), ?, ?, ?)
+                    """,
+                    (user_id, device_id, username, current_action, platform, device_name)
+                )
             conn.commit()
             
-            logger.debug(f"用户心跳更新: {username} (ID: {user_id}), 操作: {current_action}")
+            logger.info(f"用户心跳更新: {username} (ID: {user_id}), deviceId={device_id}, device_name={device_name}, platform={platform}, 操作: {current_action}")
             
             return BaseResponse(
                 success=True,
@@ -107,7 +130,7 @@ async def get_online_users(
             # 只返回当前用户ID的在线设备
             cursor = conn.execute(
                 """
-                SELECT userId, deviceId, username, last_heartbeat, current_action, platform
+                SELECT userId, deviceId, username, last_heartbeat, current_action, platform, device_name
                 FROM online_users
                 WHERE userId = ? AND datetime(last_heartbeat) > datetime('now', '-' || ? || ' seconds')
                 ORDER BY last_heartbeat DESC
@@ -119,15 +142,24 @@ async def get_online_users(
             # 转换为响应模型
             online_users = []
             for row in rows:
+                # 确保正确获取所有字段，包括 device_name
+                device_name_value = row[6] if len(row) > 6 and row[6] is not None else None
+                platform_value = row[5] if len(row) > 5 and row[5] is not None else None
+                
                 online_user = OnlineUserResponse(
                     userId=row[0],
                     deviceId=row[1],
                     username=row[2],
                     last_heartbeat=row[3],
                     current_action=row[4],
-                    platform=row[5] if len(row) > 5 else None
+                    platform=platform_value,
+                    device_name=device_name_value
                 )
-                online_users.append(online_user.model_dump())
+                # 使用 model_dump(exclude_none=False) 确保即使值为 None 也包含字段
+                user_dict = online_user.model_dump(exclude_none=False, mode='json')
+                # 调试：打印设备名称（使用 INFO 级别以便在生产环境也能看到）
+                logger.info(f"在线设备: deviceId={user_dict.get('deviceId')}, device_name={user_dict.get('device_name')}, platform={user_dict.get('platform')}, row[6]={row[6] if len(row) > 6 else 'N/A'}")
+                online_users.append(user_dict)
             
             logger.info(f"获取在线设备列表: 用户 {current_user_id} 有 {len(online_users)} 个设备在线")
             
