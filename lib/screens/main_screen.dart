@@ -1,7 +1,11 @@
 // lib/screens/main_screen.dart
 
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../widgets/online_users_indicator.dart';
+import '../widgets/device_notification_banner.dart';
+import '../services/user_status_service.dart';
+import '../repositories/settings_repository.dart';
 
 class MainScreen extends StatefulWidget {
   @override
@@ -10,6 +14,61 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
+  final UserStatusService _userStatusService = UserStatusService();
+  final SettingsRepository _settingsRepo = SettingsRepository();
+  bool _notifyDeviceOnline = true;
+  bool _notifyDeviceOffline = true;
+  Timer? _settingsRefreshTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadNotificationSettings();
+    _setupDeviceNotificationCallbacks();
+    
+    // 定期刷新通知设置（每30秒），以便在设置界面修改后能及时生效
+    _settingsRefreshTimer = Timer.periodic(Duration(seconds: 30), (_) {
+      if (mounted) {
+        _loadNotificationSettings();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _settingsRefreshTimer?.cancel();
+    super.dispose();
+  }
+
+  /// 加载通知设置
+  Future<void> _loadNotificationSettings() async {
+    try {
+      final settings = await _settingsRepo.getUserSettings();
+      if (mounted) {
+        setState(() {
+          _notifyDeviceOnline = settings.isNotifyDeviceOnline;
+          _notifyDeviceOffline = settings.isNotifyDeviceOffline;
+        });
+      }
+    } catch (e) {
+      print('加载通知设置失败: $e');
+    }
+  }
+
+  /// 设置设备通知回调
+  void _setupDeviceNotificationCallbacks() {
+    _userStatusService.onDeviceOnline = (deviceName, platform) {
+      if (_notifyDeviceOnline && mounted) {
+        DeviceNotificationBanner.showOnlineNotification(context, deviceName, platform);
+      }
+    };
+
+    _userStatusService.onDeviceOffline = (deviceName, platform) {
+      if (_notifyDeviceOffline && mounted) {
+        DeviceNotificationBanner.showOfflineNotification(context, deviceName, platform);
+      }
+    };
+  }
 
   // 定义第一页的功能项
   final List<Map<String, dynamic>> _page1Items = [

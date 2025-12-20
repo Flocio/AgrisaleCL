@@ -123,11 +123,20 @@ class UserStatusService {
   /// 在线用户列表
   List<OnlineUser> _onlineUsers = [];
 
+  /// 上一次的在线用户列表（用于检测变化）
+  List<OnlineUser> _previousOnlineUsers = [];
+
   /// 在线用户数量
   int _onlineUsersCount = 0;
 
   /// 在线用户列表更新回调
   Function(List<OnlineUser>, int)? onOnlineUsersUpdated;
+
+  /// 设备上线通知回调 (deviceName, platform)
+  Function(String, String)? onDeviceOnline;
+
+  /// 设备下线通知回调 (deviceName, platform)
+  Function(String, String)? onDeviceOffline;
 
   /// 在线用户数量更新回调
   Function(int)? onOnlineUsersCountUpdated;
@@ -314,8 +323,15 @@ class UserStatusService {
 
       if (response.isSuccess && response.data != null) {
         final onlineUsersResponse = OnlineUsersResponse.fromJson(response.data!);
-        _onlineUsers = onlineUsersResponse.onlineUsers;
+        final newUsers = onlineUsersResponse.onlineUsers;
         _onlineUsersCount = onlineUsersResponse.count;
+
+        // 检测设备变化
+        _detectDeviceChanges(_previousOnlineUsers, newUsers);
+
+        // 更新列表
+        _previousOnlineUsers = List.from(newUsers);
+        _onlineUsers = newUsers;
 
         // 触发回调
         onOnlineUsersUpdated?.call(_onlineUsers, _onlineUsersCount);
@@ -368,8 +384,61 @@ class UserStatusService {
     }
   }
 
+  /// 检测设备变化（上线/下线）
+  void _detectDeviceChanges(List<OnlineUser> oldUsers, List<OnlineUser> newUsers) {
+    // 如果这是第一次获取列表，不触发通知（避免初始化时误报）
+    if (oldUsers.isEmpty) return;
+
+    // 获取当前设备的 deviceId（用于排除自己）
+    final currentDeviceId = _deviceId;
+    if (currentDeviceId == null) {
+      // 如果还没有设备ID，异步获取（但这次不触发通知）
+      _getDeviceId().then((deviceId) {
+        _deviceId = deviceId;
+      });
+      return;
+    }
+
+    // 构建设备ID到设备的映射（排除当前设备）
+    final oldDeviceMap = <String, OnlineUser>{};
+    for (var user in oldUsers) {
+      if (user.deviceId != currentDeviceId) {
+        oldDeviceMap[user.deviceId] = user;
+      }
+    }
+
+    final newDeviceMap = <String, OnlineUser>{};
+    for (var user in newUsers) {
+      if (user.deviceId != currentDeviceId) {
+        newDeviceMap[user.deviceId] = user;
+      }
+    }
+
+    // 检测新上线的设备
+    for (var entry in newDeviceMap.entries) {
+      if (!oldDeviceMap.containsKey(entry.key)) {
+        // 新设备上线
+        final device = entry.value;
+        final deviceName = device.deviceName ?? device.platform ?? '未知设备';
+        final platform = device.platform ?? '未知平台';
+        onDeviceOnline?.call(deviceName, platform);
+      }
+    }
+
+    // 检测下线的设备
+    for (var entry in oldDeviceMap.entries) {
+      if (!newDeviceMap.containsKey(entry.key)) {
+        // 设备下线
+        final device = entry.value;
+        final deviceName = device.deviceName ?? device.platform ?? '未知设备';
+        final platform = device.platform ?? '未知平台';
+        onDeviceOffline?.call(deviceName, platform);
+      }
+    }
+  }
+
   /// 更新当前操作描述
-  /// 
+  ///
   /// [action] 当前操作描述（如"正在查看产品列表"）
   Future<void> updateCurrentAction(String action) async {
     try {

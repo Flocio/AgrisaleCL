@@ -19,6 +19,8 @@ class UserSettings {
   final int autoBackupMaxCount;
   final String? lastBackupTime;
   final int showOnlineUsers;
+  final int notifyDeviceOnline;
+  final int notifyDeviceOffline;
   final String? createdAt;
   final String? updatedAt;
 
@@ -35,6 +37,8 @@ class UserSettings {
     this.autoBackupMaxCount = 20,
     this.lastBackupTime,
     this.showOnlineUsers = 1,
+    this.notifyDeviceOnline = 1,
+    this.notifyDeviceOffline = 1,
     this.createdAt,
     this.updatedAt,
   });
@@ -53,6 +57,8 @@ class UserSettings {
       autoBackupMaxCount: json['auto_backup_max_count'] as int? ?? 20,
       lastBackupTime: json['last_backup_time'] as String?,
       showOnlineUsers: json['show_online_users'] as int? ?? 1,
+      notifyDeviceOnline: json['notify_device_online'] as int? ?? 1,
+      notifyDeviceOffline: json['notify_device_offline'] as int? ?? 1,
       createdAt: json['created_at'] as String?,
       updatedAt: json['updated_at'] as String?,
     );
@@ -72,6 +78,8 @@ class UserSettings {
       'auto_backup_max_count': autoBackupMaxCount,
       if (lastBackupTime != null) 'last_backup_time': lastBackupTime,
       'show_online_users': showOnlineUsers,
+      'notify_device_online': notifyDeviceOnline,
+      'notify_device_offline': notifyDeviceOffline,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
     };
@@ -106,6 +114,8 @@ class UserSettings {
       autoBackupMaxCount: autoBackupMaxCount ?? this.autoBackupMaxCount,
       lastBackupTime: lastBackupTime ?? this.lastBackupTime,
       showOnlineUsers: showOnlineUsers ?? this.showOnlineUsers,
+      notifyDeviceOnline: notifyDeviceOnline ?? this.notifyDeviceOnline,
+      notifyDeviceOffline: notifyDeviceOffline ?? this.notifyDeviceOffline,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -119,6 +129,12 @@ class UserSettings {
 
   /// 是否显示在线用户提示
   bool get isShowOnlineUsers => showOnlineUsers == 1;
+
+  /// 是否启用设备上线通知
+  bool get isNotifyDeviceOnline => notifyDeviceOnline == 1;
+
+  /// 是否启用设备下线通知
+  bool get isNotifyDeviceOffline => notifyDeviceOffline == 1;
 }
 
 /// 用户设置更新请求
@@ -133,6 +149,8 @@ class UserSettingsUpdate {
   final int? autoBackupMaxCount;
   final String? lastBackupTime;
   final int? showOnlineUsers;
+  final int? notifyDeviceOnline;
+  final int? notifyDeviceOffline;
 
   UserSettingsUpdate({
     this.deepseekApiKey,
@@ -145,6 +163,8 @@ class UserSettingsUpdate {
     this.autoBackupMaxCount,
     this.lastBackupTime,
     this.showOnlineUsers,
+    this.notifyDeviceOnline,
+    this.notifyDeviceOffline,
   }) : assert(
           deepseekTemperature == null ||
               (deepseekTemperature >= 0.0 && deepseekTemperature <= 1.0),
@@ -174,6 +194,14 @@ class UserSettingsUpdate {
         assert(
           showOnlineUsers == null || showOnlineUsers == 0 || showOnlineUsers == 1,
           '显示在线用户值必须是 0 或 1',
+        ),
+        assert(
+          notifyDeviceOnline == null || notifyDeviceOnline == 0 || notifyDeviceOnline == 1,
+          '设备上线通知值必须是 0 或 1',
+        ),
+        assert(
+          notifyDeviceOffline == null || notifyDeviceOffline == 0 || notifyDeviceOffline == 1,
+          '设备下线通知值必须是 0 或 1',
         );
 
   Map<String, dynamic> toJson() {
@@ -190,6 +218,8 @@ class UserSettingsUpdate {
     if (autoBackupMaxCount != null) json['auto_backup_max_count'] = autoBackupMaxCount;
     if (lastBackupTime != null) json['last_backup_time'] = lastBackupTime;
     if (showOnlineUsers != null) json['show_online_users'] = showOnlineUsers;
+    if (notifyDeviceOnline != null) json['notify_device_online'] = notifyDeviceOnline;
+    if (notifyDeviceOffline != null) json['notify_device_offline'] = notifyDeviceOffline;
     return json;
   }
 }

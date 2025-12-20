@@ -518,6 +518,8 @@ class UserSettingsUpdate(BaseModel):
     auto_backup_max_count: Optional[int] = Field(None, ge=1)
     last_backup_time: Optional[str] = Field(None, description="最后备份时间（ISO8601格式）")
     show_online_users: Optional[int] = Field(None, ge=0, le=1, description="显示在线用户提示")
+    notify_device_online: Optional[int] = Field(None, ge=0, le=1, description="设备上线通知")
+    notify_device_offline: Optional[int] = Field(None, ge=0, le=1, description="设备下线通知")
 
 
 class UserSettingsResponse(BaseModel):
@@ -534,6 +536,8 @@ class UserSettingsResponse(BaseModel):
     auto_backup_max_count: int = 20
     last_backup_time: Optional[str] = None
     show_online_users: int = 1
+    notify_device_online: int = 1
+    notify_device_offline: int = 1
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 

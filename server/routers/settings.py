@@ -45,6 +45,7 @@ async def get_user_settings(
                 SELECT id, userId, deepseek_api_key, deepseek_model, deepseek_temperature,
                        deepseek_max_tokens, dark_mode, auto_backup_enabled, auto_backup_interval,
                        auto_backup_max_count, last_backup_time, show_online_users,
+                       notify_device_online, notify_device_offline,
                        created_at, updated_at
                 FROM user_settings
                 WHERE userId = ?
@@ -70,6 +71,7 @@ async def get_user_settings(
                     SELECT id, userId, deepseek_api_key, deepseek_model, deepseek_temperature,
                            deepseek_max_tokens, dark_mode, auto_backup_enabled, auto_backup_interval,
                            auto_backup_max_count, last_backup_time, show_online_users,
+                           notify_device_online, notify_device_offline,
                            created_at, updated_at
                     FROM user_settings
                     WHERE userId = ?
@@ -91,8 +93,10 @@ async def get_user_settings(
                 auto_backup_max_count=row[9] if row[9] is not None else 20,
                 last_backup_time=row[10],
                 show_online_users=row[11] if row[11] is not None else 1,
-                created_at=row[12],
-                updated_at=row[13]
+                notify_device_online=row[12] if len(row) > 12 and row[12] is not None else 1,
+                notify_device_offline=row[13] if len(row) > 13 and row[13] is not None else 1,
+                created_at=row[14] if len(row) > 14 else row[12],
+                updated_at=row[15] if len(row) > 15 else row[13]
             )
             
             return BaseResponse(
@@ -186,6 +190,12 @@ async def update_user_settings(
             if settings_data.show_online_users is not None:
                 update_fields.append("show_online_users = ?")
                 update_values.append(settings_data.show_online_users)
+            if settings_data.notify_device_online is not None:
+                update_fields.append("notify_device_online = ?")
+                update_values.append(settings_data.notify_device_online)
+            if settings_data.notify_device_offline is not None:
+                update_fields.append("notify_device_offline = ?")
+                update_values.append(settings_data.notify_device_offline)
             
             if settings_data.last_backup_time is not None:
                 update_fields.append("last_backup_time = ?")
@@ -216,6 +226,7 @@ async def update_user_settings(
                 SELECT id, userId, deepseek_api_key, deepseek_model, deepseek_temperature,
                        deepseek_max_tokens, dark_mode, auto_backup_enabled, auto_backup_interval,
                        auto_backup_max_count, last_backup_time, show_online_users,
+                       notify_device_online, notify_device_offline,
                        created_at, updated_at
                 FROM user_settings
                 WHERE userId = ?
@@ -237,8 +248,10 @@ async def update_user_settings(
                 auto_backup_max_count=row[9] if row[9] is not None else 20,
                 last_backup_time=row[10],
                 show_online_users=row[11] if row[11] is not None else 1,
-                created_at=row[12],
-                updated_at=row[13]
+                notify_device_online=row[12] if len(row) > 12 and row[12] is not None else 1,
+                notify_device_offline=row[13] if len(row) > 13 and row[13] is not None else 1,
+                created_at=row[14] if len(row) > 14 else row[12],
+                updated_at=row[15] if len(row) > 15 else row[13]
             )
             
             logger.info(f"更新用户设置成功: {user_id}")

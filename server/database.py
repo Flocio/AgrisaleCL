@@ -309,6 +309,8 @@ class SQLiteConnectionPool:
                 auto_backup_max_count INTEGER DEFAULT 20,
                 last_backup_time TEXT,
                 show_online_users INTEGER DEFAULT 1,
+                notify_device_online INTEGER DEFAULT 1,
+                notify_device_offline INTEGER DEFAULT 1,
                 created_at TEXT DEFAULT (datetime('now')),
                 updated_at TEXT DEFAULT (datetime('now')),
                 FOREIGN KEY (userId) REFERENCES users (id) ON DELETE CASCADE)
@@ -424,6 +426,10 @@ class SQLiteConnectionPool:
                 conn.execute('ALTER TABLE user_settings ADD COLUMN last_backup_time TEXT')
             if 'show_online_users' not in columns:
                 conn.execute('ALTER TABLE user_settings ADD COLUMN show_online_users INTEGER DEFAULT 1')
+            if 'notify_device_online' not in columns:
+                conn.execute('ALTER TABLE user_settings ADD COLUMN notify_device_online INTEGER DEFAULT 1')
+            if 'notify_device_offline' not in columns:
+                conn.execute('ALTER TABLE user_settings ADD COLUMN notify_device_offline INTEGER DEFAULT 1')
             
             # 创建在线用户表（支持多设备）
             conn.execute('''

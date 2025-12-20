@@ -55,6 +55,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   
   // 在线设备提示开关
   bool _showOnlineUsers = true;
+  bool _notifyDeviceOnline = true;
+  bool _notifyDeviceOffline = true;
 
   @override
   void initState() {
@@ -92,6 +94,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await _settingsRepo.updateUserSettings(
         UserSettingsUpdate(
           showOnlineUsers: _showOnlineUsers ? 1 : 0,
+          notifyDeviceOnline: _notifyDeviceOnline ? 1 : 0,
+          notifyDeviceOffline: _notifyDeviceOffline ? 1 : 0,
         ),
       );
       return true; // 保存成功
@@ -796,6 +800,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             _autoSaveSettings();
                           },
                           secondary: Icon(Icons.devices, color: Colors.blue),
+                        ),
+                        Divider(),
+                        SwitchListTile(
+                          title: Text('设备上线通知'),
+                          subtitle: Text('当有新设备登录时显示通知'),
+                          value: _notifyDeviceOnline,
+                          onChanged: (value) {
+                            setState(() {
+                              _notifyDeviceOnline = value;
+                            });
+                            // 自动保存设置
+                            _autoSaveSettings();
+                          },
+                          secondary: Icon(Icons.device_hub, color: Colors.green),
+                        ),
+                        SwitchListTile(
+                          title: Text('设备下线通知'),
+                          subtitle: Text('当有设备离线时显示通知'),
+                          value: _notifyDeviceOffline,
+                          onChanged: (value) {
+                            setState(() {
+                              _notifyDeviceOffline = value;
+                            });
+                            // 自动保存设置
+                            _autoSaveSettings();
+                          },
+                          secondary: Icon(Icons.devices_other, color: Colors.orange),
                         ),
                       ],
                     ),
