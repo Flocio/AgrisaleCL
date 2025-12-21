@@ -461,15 +461,47 @@ jobs:
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
 
-      - name: Save website files before checkout
+      - name: Fetch website files from main branch
         run: |
-          echo "=== 保存网站文件 ==="
-          if [ -d "website" ]; then
-            cp -r website /tmp/website_backup
-            echo "✓ 网站文件已保存到 /tmp/website_backup"
+          echo "=== 从主分支获取网站文件 ==="
+          # 获取主分支的 website 文件夹
+          git fetch origin main:main 2>/dev/null || git fetch origin master:master 2>/dev/null || true
+          
+          # 创建临时目录保存网站文件
+          mkdir -p /tmp/website_backup
+          
+          # 从主分支提取 website 文件
+          if git show origin/main:website/index.html > /tmp/website_backup/index.html 2>/dev/null || \
+             git show origin/master:website/index.html > /tmp/website_backup/index.html 2>/dev/null; then
+            echo "✓ 主网站文件已获取"
           else
-            echo "⚠️ website 文件夹不存在"
+            echo "⚠️ 无法从主分支获取主网站文件，尝试从当前工作区获取"
+            if [ -d "website" ]; then
+              cp -r website /tmp/website_backup
+              echo "✓ 从当前工作区复制网站文件"
+            else
+              echo "❌ 错误：无法找到网站文件"
+              exit 1
+            fi
           fi
+          
+          # 获取下载页面文件
+          mkdir -p /tmp/website_backup/downloads
+          if git show origin/main:website/downloads/index.html > /tmp/website_backup/downloads/index.html 2>/dev/null || \
+             git show origin/master:website/downloads/index.html > /tmp/website_backup/downloads/index.html 2>/dev/null; then
+            echo "✓ 下载页面文件已获取"
+          else
+            echo "⚠️ 无法从主分支获取下载页面文件，尝试从当前工作区获取"
+            if [ -f "website/downloads/index.html" ]; then
+              cp website/downloads/index.html /tmp/website_backup/downloads/index.html
+              echo "✓ 从当前工作区复制下载页面文件"
+            else
+              echo "❌ 错误：无法找到下载页面文件"
+              exit 1
+            fi
+          fi
+          
+          echo "✓ 网站文件已保存到 /tmp/website_backup"
 
       - name: Checkout or create gh-pages branch
         run: |
@@ -564,25 +596,54 @@ jobs:
       - name: Copy website files
         run: |
           echo "=== 复制网站文件 ==="
-          if [ -d "/tmp/website_backup" ]; then
+          
+          # 优先使用备份文件
+          if [ -d "/tmp/website_backup" ] && [ -f "/tmp/website_backup/index.html" ]; then
+            echo "使用备份文件..."
             cp /tmp/website_backup/index.html index.html
             mkdir -p downloads
             cp /tmp/website_backup/downloads/index.html downloads/index.html
-            echo "✓ 网站文件已复制"
+            echo "✓ 网站文件已从备份复制"
           else
-            echo "❌ 错误：无法找到网站文件备份"
-            echo "尝试从主分支获取..."
-            # 备用方案：从主分支获取 website 文件夹
+            echo "从主分支获取网站文件..."
+            # 确保获取了主分支
             git fetch origin main:main 2>/dev/null || git fetch origin master:master 2>/dev/null || true
-            git show origin/main:website/index.html > index.html 2>/dev/null || \
-            git show origin/master:website/index.html > index.html 2>/dev/null || \
-            (echo "❌ 无法获取网站文件" && exit 1)
+            
+            # 从主分支获取主网站文件
+            if git show origin/main:website/index.html > index.html 2>/dev/null || \
+               git show origin/master:website/index.html > index.html 2>/dev/null; then
+              echo "✓ 主网站文件已从主分支获取"
+            else
+              echo "❌ 错误：无法从主分支获取主网站文件"
+              echo "尝试从当前工作区获取..."
+              if [ -f "website/index.html" ]; then
+                cp website/index.html index.html
+                echo "✓ 从当前工作区复制主网站文件"
+              else
+                echo "❌ 无法找到主网站文件"
+                exit 1
+              fi
+            fi
+            
+            # 从主分支获取下载页面文件
             mkdir -p downloads
-            git show origin/main:website/downloads/index.html > downloads/index.html 2>/dev/null || \
-            git show origin/master:website/downloads/index.html > downloads/index.html 2>/dev/null || \
-            (echo "❌ 无法获取下载页面文件" && exit 1)
-            echo "✓ 网站文件已从主分支获取"
+            if git show origin/main:website/downloads/index.html > downloads/index.html 2>/dev/null || \
+               git show origin/master:website/downloads/index.html > downloads/index.html 2>/dev/null; then
+              echo "✓ 下载页面文件已从主分支获取"
+            else
+              echo "⚠️ 无法从主分支获取下载页面文件"
+              echo "尝试从当前工作区获取..."
+              if [ -f "website/downloads/index.html" ]; then
+                cp website/downloads/index.html downloads/index.html
+                echo "✓ 从当前工作区复制下载页面文件"
+              else
+                echo "❌ 无法找到下载页面文件"
+                exit 1
+              fi
+            fi
           fi
+          
+          echo "✓ 网站文件复制完成"
 
       - name: Create CNAME file
         run: |
