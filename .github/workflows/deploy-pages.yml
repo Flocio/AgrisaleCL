@@ -1,0 +1,186 @@
+name: Deploy to GitHub Pages
+
+on:
+  # 在 Multi-Platform Build 工作流完成后触发
+  workflow_run:
+    workflows: ["Multi-Platform Build"]
+    types:
+      - completed
+  # 也支持手动触发
+  workflow_dispatch:
+
+env:
+  VERSION_TAG: "v1.8.0"
+
+jobs:
+  deploy-pages:
+    name: Deploy to GitHub Pages
+    runs-on: ubuntu-latest
+    # 只有当触发的工作流成功完成时才运行
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download artifacts from triggering workflow
+        uses: dawidd6/action-download-artifact@v3
+        with:
+          workflow: dart.yml
+          run_id: ${{ github.event.workflow_run.id }}
+          path: artifacts
+        if: github.event_name == 'workflow_run'
+
+      - name: Download latest artifacts (manual trigger)
+        uses: dawidd6/action-download-artifact@v3
+        with:
+          workflow: dart.yml
+          workflow_conclusion: success
+          path: artifacts
+        if: github.event_name == 'workflow_dispatch'
+
+      - name: Display structure of downloaded files
+        run: |
+          echo "=== 下载的文件结构 ==="
+          ls -la artifacts/ || echo "artifacts 目录不存在"
+          ls -laR artifacts/ || true
+
+      - name: Setup Git
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+
+      - name: Checkout or create gh-pages branch
+        run: |
+          # 尝试获取 gh-pages 分支
+          git fetch origin gh-pages:gh-pages 2>/dev/null || true
+          
+          # 如果分支不存在，创建它
+          if ! git show-ref --verify --quiet refs/heads/gh-pages; then
+            echo "创建 gh-pages 分支..."
+            git checkout --orphan gh-pages
+            git rm -rf . || true
+            git commit --allow-empty -m "Initial commit for gh-pages"
+            git push origin gh-pages
+          else
+            echo "切换到 gh-pages 分支..."
+            git checkout gh-pages
+          fi
+          
+          # 清理旧文件（保留 .git）
+          find . -maxdepth 1 ! -name '.git' ! -name '.' -exec rm -rf {} +
+
+      - name: Create directory structure
+        run: |
+          mkdir -p downloads/{android,ios,macos,windows,api}
+          echo "✓ 目录结构已创建"
+
+      - name: Copy build artifacts
+        run: |
+          echo "=== 复制构建产物 ==="
+          
+          # 复制 Android APK
+          if [ -f "artifacts/Android-APK/agrisalecl-android-${{ env.VERSION_TAG }}.apk" ]; then
+            cp artifacts/Android-APK/agrisalecl-android-${{ env.VERSION_TAG }}.apk downloads/android/
+            echo "✓ Android APK 已复制"
+          else
+            echo "⚠️ Android APK 未找到"
+          fi
+          
+          # 复制 Android AAB
+          if [ -f "artifacts/Android-Bundle/agrisalecl-android-${{ env.VERSION_TAG }}.aab" ]; then
+            cp artifacts/Android-Bundle/agrisalecl-android-${{ env.VERSION_TAG }}.aab downloads/android/
+            echo "✓ Android AAB 已复制"
+          else
+            echo "⚠️ Android AAB 未找到"
+          fi
+          
+          # 复制 iOS IPA
+          if [ -f "artifacts/iOS-Build/agrisalecl-ios-${{ env.VERSION_TAG }}.ipa" ]; then
+            cp artifacts/iOS-Build/agrisalecl-ios-${{ env.VERSION_TAG }}.ipa downloads/ios/
+            echo "✓ iOS IPA 已复制"
+          else
+            echo "⚠️ iOS IPA 未找到"
+          fi
+          
+          # 复制 macOS ZIP
+          if [ -f "artifacts/macOS-Build/agrisalecl-macos-${{ env.VERSION_TAG }}.zip" ]; then
+            cp artifacts/macOS-Build/agrisalecl-macos-${{ env.VERSION_TAG }}.zip downloads/macos/
+            echo "✓ macOS ZIP 已复制"
+          else
+            echo "⚠️ macOS ZIP 未找到"
+          fi
+          
+          # 复制 Windows ZIP
+          if [ -f "artifacts/Windows-Build/agrisalecl-windows-${{ env.VERSION_TAG }}.zip" ]; then
+            cp artifacts/Windows-Build/agrisalecl-windows-${{ env.VERSION_TAG }}.zip downloads/windows/
+            echo "✓ Windows ZIP 已复制"
+          else
+            echo "⚠️ Windows ZIP 未找到"
+          fi
+
+      - name: Generate latest.json
+        run: |
+          cat > downloads/api/latest.json << EOF
+          {
+            "version": "${{ env.VERSION_TAG }}",
+            "tag_name": "${{ env.VERSION_TAG }}",
+            "release_notes": "### ${{ env.VERSION_TAG }} 更新内容\n- **网站重构**：将网站 HTML 文件从工作流中分离到独立的 website/ 文件夹，提高可维护性\n- **域名优化**：使用 agricl.drflo.org 作为官方网站域名，与 API 服务器域名分离",
+            "downloads": {
+              "android": {
+                "apk": "https://agricl.drflo.org/downloads/android/agrisalecl-android-${{ env.VERSION_TAG }}.apk",
+                "aab": "https://agricl.drflo.org/downloads/android/agrisalecl-android-${{ env.VERSION_TAG }}.aab"
+              },
+              "ios": {
+                "ipa": "https://agricl.drflo.org/downloads/ios/agrisalecl-ios-${{ env.VERSION_TAG }}.ipa"
+              },
+              "macos": {
+                "zip": "https://agricl.drflo.org/downloads/macos/agrisalecl-macos-${{ env.VERSION_TAG }}.zip"
+              },
+              "windows": {
+                "zip": "https://agricl.drflo.org/downloads/windows/agrisalecl-windows-${{ env.VERSION_TAG }}.zip"
+              }
+            }
+          }
+          EOF
+          echo "=== 生成的 latest.json ==="
+          cat downloads/api/latest.json
+
+      - name: Checkout website files from main branch
+        run: |
+          echo "=== 从 main 分支获取网站文件 ==="
+          # 从 main 分支获取 website 文件夹
+          git checkout origin/main -- website/
+          echo "✓ 网站文件已获取"
+          ls -la website/
+
+      - name: Copy website files
+        run: |
+          echo "=== 复制网站文件 ==="
+          cp website/index.html index.html
+          cp website/downloads/index.html downloads/index.html
+          echo "✓ 网站文件已复制"
+          
+          # 清理临时的 website 文件夹
+          rm -rf website/
+
+      - name: Create CNAME file
+        run: |
+          echo "agricl.drflo.org" > CNAME
+          echo "✓ CNAME 文件已创建（主网站域名：agricl.drflo.org）"
+
+      - name: List final structure
+        run: |
+          echo "=== 最终文件结构 ==="
+          ls -laR .
+
+      - name: Commit and push to gh-pages
+        run: |
+          git add .
+          git commit -m "Deploy ${{ env.VERSION_TAG }} to GitHub Pages" || echo "No changes to commit"
+          git push origin gh-pages
+          echo "✓ 已推送到 gh-pages 分支"
