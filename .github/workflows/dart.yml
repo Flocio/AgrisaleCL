@@ -8,7 +8,7 @@ on:
 
 env:
   FLUTTER_VERSION: "3.24.0"
-  VERSION_TAG: "v1.6.0"
+  VERSION_TAG: "v1.7.0"
 
 jobs:
   # iOS 构建
@@ -402,7 +402,7 @@ jobs:
             - macOS: Mac 桌面应用
             - Windows: Windows 桌面应用
             
-            ### v1.6.0 更新内容
+            ### v1.7.0 更新内容
             - **PDF 导出功能**：新增 PDF 格式导出，支持所有报表导出为 PDF 文件，便于打印和分享
             - **导出功能优化**：导出选项界面优化，支持选择 CSV 或 PDF 格式，统一导出体验
             - **PDF 表格渲染**：PDF 导出支持完整表格格式，包含表头、数据行和汇总信息
