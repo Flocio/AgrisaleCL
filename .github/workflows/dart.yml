@@ -461,6 +461,16 @@ jobs:
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
 
+      - name: Save website files before checkout
+        run: |
+          echo "=== 保存网站文件 ==="
+          if [ -d "website" ]; then
+            cp -r website /tmp/website_backup
+            echo "✓ 网站文件已保存到 /tmp/website_backup"
+          else
+            echo "⚠️ website 文件夹不存在"
+          fi
+
       - name: Checkout or create gh-pages branch
         run: |
           # 尝试获取 gh-pages 分支
@@ -554,10 +564,25 @@ jobs:
       - name: Copy website files
         run: |
           echo "=== 复制网站文件 ==="
-          cp website/index.html index.html
-          mkdir -p downloads
-          cp website/downloads/index.html downloads/index.html
-          echo "✓ 网站文件已复制"
+          if [ -d "/tmp/website_backup" ]; then
+            cp /tmp/website_backup/index.html index.html
+            mkdir -p downloads
+            cp /tmp/website_backup/downloads/index.html downloads/index.html
+            echo "✓ 网站文件已复制"
+          else
+            echo "❌ 错误：无法找到网站文件备份"
+            echo "尝试从主分支获取..."
+            # 备用方案：从主分支获取 website 文件夹
+            git fetch origin main:main 2>/dev/null || git fetch origin master:master 2>/dev/null || true
+            git show origin/main:website/index.html > index.html 2>/dev/null || \
+            git show origin/master:website/index.html > index.html 2>/dev/null || \
+            (echo "❌ 无法获取网站文件" && exit 1)
+            mkdir -p downloads
+            git show origin/main:website/downloads/index.html > downloads/index.html 2>/dev/null || \
+            git show origin/master:website/downloads/index.html > downloads/index.html 2>/dev/null || \
+            (echo "❌ 无法获取下载页面文件" && exit 1)
+            echo "✓ 网站文件已从主分支获取"
+          fi
 
       - name: Create CNAME file
         run: |
