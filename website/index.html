@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AgrisaleCL - 农资销售管理系统</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 80px 20px;
+            text-align: center;
+        }
+        .header h1 {
+            font-size: 3em;
+            margin-bottom: 20px;
+        }
+        .header p {
+            font-size: 1.3em;
+            opacity: 0.9;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        .nav {
+            background: white;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 20px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .nav-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .nav-links {
+            display: flex;
+            gap: 30px;
+        }
+        .nav-links a {
+            color: #333;
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.3s;
+        }
+        .nav-links a:hover {
+            color: #667eea;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 60px 20px;
+        }
+        .section {
+            margin-bottom: 80px;
+        }
+        .section h2 {
+            font-size: 2.5em;
+            margin-bottom: 30px;
+            color: #667eea;
+            text-align: center;
+        }
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin-top: 40px;
+        }
+        .feature-card {
+            background: white;
+            border: 2px solid #e0e0e0;
+            border-radius: 15px;
+            padding: 30px;
+            transition: all 0.3s;
+        }
+        .feature-card:hover {
+            border-color: #667eea;
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.2);
+            transform: translateY(-5px);
+        }
+        .feature-card h3 {
+            font-size: 1.5em;
+            margin-bottom: 15px;
+            color: #667eea;
+        }
+        .feature-card p {
+            color: #666;
+            line-height: 1.8;
+        }
+        .btn {
+            display: inline-block;
+            padding: 15px 40px;
+            background: #667eea;
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 500;
+            font-size: 1.1em;
+            transition: all 0.3s;
+            margin-top: 20px;
+        }
+        .btn:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.3);
+        }
+        .btn-center {
+            text-align: center;
+            margin-top: 40px;
+        }
+        .footer {
+            background: #2c3e50;
+            color: white;
+            text-align: center;
+            padding: 40px 20px;
+            margin-top: 80px;
+        }
+        @media (max-width: 768px) {
+            .header h1 { font-size: 2em; }
+            .nav-links { flex-direction: column; gap: 15px; }
+            .features { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🚀 AgrisaleCL</h1>
+        <p>专业的农资销售管理系统，支持多平台、多设备协作</p>
+    </div>
+    
+    <nav class="nav">
+        <div class="nav-content">
+            <div style="font-size: 1.5em; font-weight: bold; color: #667eea;">AgrisaleCL</div>
+            <div class="nav-links">
+                <a href="#features">功能特性</a>
+                <a href="#platforms">支持平台</a>
+                <a href="/downloads">下载</a>
+                <a href="https://github.com/Flocio/AgrisaleCL" target="_blank">GitHub</a>
+            </div>
+        </div>
+    </nav>
+    
+    <div class="container">
+        <section class="section" id="features">
+            <h2>✨ 核心功能</h2>
+            <div class="features">
+                <div class="feature-card">
+                    <h3>📦 产品管理</h3>
+                    <p>完整的产品信息管理，支持库存跟踪、供应商关联、乐观锁机制防止并发冲突。</p>
+                </div>
+                <div class="feature-card">
+                    <h3>💰 业务记录</h3>
+                    <p>采购、销售、退货、进账、汇款全流程记录，自动更新库存，支持负数采购（退货）。</p>
+                </div>
+                <div class="feature-card">
+                    <h3>👥 关系管理</h3>
+                    <p>客户、供应商、员工信息管理，完整的业务关系跟踪。</p>
+                </div>
+                <div class="feature-card">
+                    <h3>📊 数据分析</h3>
+                    <p>丰富的报表和统计功能，支持库存、采购、销售、财务等多维度分析。</p>
+                </div>
+                <div class="feature-card">
+                    <h3>🤖 AI 助手</h3>
+                    <p>集成 DeepSeek API，提供智能数据分析助手，支持流式输出和对话历史。</p>
+                </div>
+                <div class="feature-card">
+                    <h3>📝 操作日志</h3>
+                    <p>完整的操作日志审计功能，记录所有关键操作，支持查询和追溯。</p>
+                </div>
+                <div class="feature-card">
+                    <h3>☁️ 云端同步</h3>
+                    <p>所有数据存储在云端服务器，支持多设备实时同步，多设备协作。</p>
+                </div>
+                <div class="feature-card">
+                    <h3>💾 数据备份</h3>
+                    <p>支持自动和手动数据备份，定时备份功能，数据安全有保障。</p>
+                </div>
+                <div class="feature-card">
+                    <h3>📤 数据导出</h3>
+                    <p>支持 CSV 和 PDF 格式导出，完美支持中文字符，便于打印和分享。</p>
+                </div>
+            </div>
+        </section>
+        
+        <section class="section" id="platforms">
+            <h2>🌐 支持平台</h2>
+            <div class="features">
+                <div class="feature-card">
+                    <h3>📱 Android</h3>
+                    <p>支持 Android 5.0+，手机和平板设备，提供原生用户体验。</p>
+                </div>
+                <div class="feature-card">
+                    <h3>🍎 iOS</h3>
+                    <p>支持 iOS 12.0+，iPhone 和 iPad 设备，完美适配各种屏幕尺寸。</p>
+                </div>
+                <div class="feature-card">
+                    <h3>💻 macOS</h3>
+                    <p>支持 macOS 10.14+，原生桌面应用，充分利用 Mac 的强大性能。</p>
+                </div>
+                <div class="feature-card">
+                    <h3>🪟 Windows</h3>
+                    <p>支持 Windows 10+，原生桌面应用，完美支持中文字体显示。</p>
+                </div>
+            </div>
+        </section>
+        
+        <section class="section">
+            <h2>🚀 开始使用</h2>
+            <p style="text-align: center; font-size: 1.2em; color: #666; margin-bottom: 30px;">
+                立即下载 AgrisaleCL，体验专业的农资销售管理
+            </p>
+            <div class="btn-center">
+                <a href="/downloads" class="btn">立即下载</a>
+            </div>
+        </section>
+    </div>
+    
+    <div class="footer">
+        <p>© 2025 AgrisaleCL | 开源免费 | 跨平台支持</p>
+        <p style="margin-top: 10px; opacity: 0.8;">
+            <a href="https://github.com/Flocio/AgrisaleCL" target="_blank" style="color: white;">GitHub 仓库</a> | 
+            <a href="/downloads" style="color: white;">下载中心</a>
+        </p>
+    </div>
+</body>
+</html>

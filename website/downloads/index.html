@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AgrisaleCL 下载中心</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px 20px;
+            text-align: center;
+        }
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+        .content {
+            padding: 40px;
+        }
+        .version-info {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        .version-info h2 {
+            color: #667eea;
+            font-size: 1.8em;
+            margin-bottom: 10px;
+        }
+        .downloads {
+            display: grid;
+            gap: 20px;
+        }
+        .download-card {
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 20px;
+            transition: all 0.3s;
+        }
+        .download-card:hover {
+            border-color: #667eea;
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.2);
+            transform: translateY(-2px);
+        }
+        .download-card h3 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 1.3em;
+        }
+        .download-links {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .btn {
+            display: inline-block;
+            padding: 12px 24px;
+            background: #667eea;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            transition: all 0.3s;
+            font-weight: 500;
+        }
+        .btn:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+        }
+        .btn-secondary {
+            background: #6c757d;
+        }
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+        .footer {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+            border-top: 1px solid #e0e0e0;
+        }
+        .back-link {
+            display: inline-block;
+            margin-top: 20px;
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 500;
+        }
+        .back-link:hover {
+            text-decoration: underline;
+        }
+        @media (max-width: 600px) {
+            .header h1 { font-size: 2em; }
+            .download-links { flex-direction: column; }
+            .btn { width: 100%; text-align: center; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 AgrisaleCL</h1>
+            <p>农资销售管理系统 - 下载中心</p>
+        </div>
+        <div class="content">
+            <div class="version-info">
+                <h2 id="version">加载中...</h2>
+                <p id="release-notes">正在获取版本信息...</p>
+            </div>
+            <div class="downloads">
+                <div class="download-card">
+                    <h3>📱 Android</h3>
+                    <div class="download-links">
+                        <a href="#" id="android-apk" class="btn">下载 APK</a>
+                        <a href="#" id="android-aab" class="btn btn-secondary">下载 AAB</a>
+                    </div>
+                </div>
+                <div class="download-card">
+                    <h3>🍎 iOS</h3>
+                    <div class="download-links">
+                        <a href="#" id="ios-ipa" class="btn">下载 IPA</a>
+                    </div>
+                </div>
+                <div class="download-card">
+                    <h3>💻 macOS</h3>
+                    <div class="download-links">
+                        <a href="#" id="macos-zip" class="btn">下载 ZIP</a>
+                    </div>
+                </div>
+                <div class="download-card">
+                    <h3>🪟 Windows</h3>
+                    <div class="download-links">
+                        <a href="#" id="windows-zip" class="btn">下载 ZIP</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="footer">
+            <p>© 2025 AgrisaleCL | 开源免费 | 跨平台支持</p>
+            <a href="/" class="back-link">← 返回主页</a>
+        </div>
+    </div>
+    <script>
+        fetch('/downloads/api/latest.json')
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('version').textContent = '最新版本: ' + data.tag_name;
+                document.getElementById('release-notes').innerHTML = data.release_notes.replace(/\n/g, '<br>');
+                
+                if (data.downloads.android) {
+                    if (data.downloads.android.apk) {
+                        document.getElementById('android-apk').href = data.downloads.android.apk;
+                    }
+                    if (data.downloads.android.aab) {
+                        document.getElementById('android-aab').href = data.downloads.android.aab;
+                    }
+                }
+                if (data.downloads.ios && data.downloads.ios.ipa) {
+                    document.getElementById('ios-ipa').href = data.downloads.ios.ipa;
+                }
+                if (data.downloads.macos && data.downloads.macos.zip) {
+                    document.getElementById('macos-zip').href = data.downloads.macos.zip;
+                }
+                if (data.downloads.windows && data.downloads.windows.zip) {
+                    document.getElementById('windows-zip').href = data.downloads.windows.zip;
+                }
+            })
+            .catch(error => {
+                document.getElementById('version').textContent = '无法加载版本信息';
+                document.getElementById('release-notes').textContent = '请稍后重试';
+                console.error('Error:', error);
+            });
+    </script>
+</body>
+</html>

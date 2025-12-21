@@ -8,7 +8,7 @@ on:
 
 env:
   FLUTTER_VERSION: "3.24.0"
-  VERSION_TAG: "v1.7.0"
+  VERSION_TAG: "v1.8.0"
 
 jobs:
   # iOS 构建
@@ -402,7 +402,7 @@ jobs:
             - macOS: Mac 桌面应用
             - Windows: Windows 桌面应用
             
-            ### v1.7.0 更新内容
+            ### v1.8.0 更新内容
             - **PDF 导出功能**：新增 PDF 格式导出，支持所有报表导出为 PDF 文件，便于打印和分享
             - **导出功能优化**：导出选项界面优化，支持选择 CSV 或 PDF 格式，统一导出体验
             - **PDF 表格渲染**：PDF 导出支持完整表格格式，包含表头、数据行和汇总信息
@@ -436,3 +436,130 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  # 部署到 GitHub Pages
+  deploy-pages:
+    name: Deploy to GitHub Pages
+    needs: [create-release]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Setup Git
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+
+      - name: Checkout or create gh-pages branch
+        run: |
+          # 尝试获取 gh-pages 分支
+          git fetch origin gh-pages:gh-pages 2>/dev/null || true
+          
+          # 如果分支不存在，创建它
+          if ! git show-ref --verify --quiet refs/heads/gh-pages; then
+            git checkout --orphan gh-pages
+            git rm -rf . || true
+            git commit --allow-empty -m "Initial commit for gh-pages"
+            git push origin gh-pages
+          else
+            git checkout gh-pages
+          fi
+
+      - name: Create directory structure
+        run: |
+          mkdir -p downloads/{android,ios,macos,windows,api}
+
+      - name: Copy build artifacts
+        run: |
+          echo "=== 复制构建产物 ==="
+          
+          # 复制 Android APK
+          if [ -f "artifacts/Android-APK/agrisalecl-android-${{ env.VERSION_TAG }}.apk" ]; then
+            cp artifacts/Android-APK/agrisalecl-android-${{ env.VERSION_TAG }}.apk downloads/android/
+            echo "✓ Android APK 已复制"
+          else
+            echo "⚠️ Android APK 未找到"
+          fi
+          
+          # 复制 Android AAB
+          if [ -f "artifacts/Android-Bundle/agrisalecl-android-${{ env.VERSION_TAG }}.aab" ]; then
+            cp artifacts/Android-Bundle/agrisalecl-android-${{ env.VERSION_TAG }}.aab downloads/android/
+            echo "✓ Android AAB 已复制"
+          else
+            echo "⚠️ Android AAB 未找到"
+          fi
+          
+          # 复制 iOS IPA
+          if [ -f "artifacts/iOS-Build/agrisalecl-ios-${{ env.VERSION_TAG }}.ipa" ]; then
+            cp artifacts/iOS-Build/agrisalecl-ios-${{ env.VERSION_TAG }}.ipa downloads/ios/
+            echo "✓ iOS IPA 已复制"
+          else
+            echo "⚠️ iOS IPA 未找到"
+          fi
+          
+          # 复制 macOS ZIP
+          if [ -f "artifacts/macOS-Build/agrisalecl-macos-${{ env.VERSION_TAG }}.zip" ]; then
+            cp artifacts/macOS-Build/agrisalecl-macos-${{ env.VERSION_TAG }}.zip downloads/macos/
+            echo "✓ macOS ZIP 已复制"
+          else
+            echo "⚠️ macOS ZIP 未找到"
+          fi
+          
+          # 复制 Windows ZIP
+          if [ -f "artifacts/Windows-Build/agrisalecl-windows-${{ env.VERSION_TAG }}.zip" ]; then
+            cp artifacts/Windows-Build/agrisalecl-windows-${{ env.VERSION_TAG }}.zip downloads/windows/
+            echo "✓ Windows ZIP 已复制"
+          else
+            echo "⚠️ Windows ZIP 未找到"
+          fi
+
+      - name: Generate latest.json
+        run: |
+          cat > downloads/api/latest.json << EOF
+          {
+            "version": "${{ env.VERSION_TAG }}",
+            "tag_name": "${{ env.VERSION_TAG }}",
+            "release_notes": "### v1.8.0 更新内容\n- **网站重构**：将网站 HTML 文件从工作流中分离到独立的 website/ 文件夹，提高可维护性\n- **域名优化**：使用 agricl.drflo.org 作为官方网站域名，与 API 服务器域名分离",
+            "downloads": {
+              "android": {
+                "apk": "https://agricl.drflo.org/downloads/android/agrisalecl-android-${{ env.VERSION_TAG }}.apk",
+                "aab": "https://agricl.drflo.org/downloads/android/agrisalecl-android-${{ env.VERSION_TAG }}.aab"
+              },
+              "ios": {
+                "ipa": "https://agricl.drflo.org/downloads/ios/agrisalecl-ios-${{ env.VERSION_TAG }}.ipa"
+              },
+              "macos": {
+                "zip": "https://agricl.drflo.org/downloads/macos/agrisalecl-macos-${{ env.VERSION_TAG }}.zip"
+              },
+              "windows": {
+                "zip": "https://agricl.drflo.org/downloads/windows/agrisalecl-windows-${{ env.VERSION_TAG }}.zip"
+              }
+            }
+          }
+          EOF
+          echo "=== 生成的 latest.json ==="
+          cat downloads/api/latest.json
+
+      - name: Copy website files
+        run: |
+          echo "=== 复制网站文件 ==="
+          cp website/index.html index.html
+          mkdir -p downloads
+          cp website/downloads/index.html downloads/index.html
+          echo "✓ 网站文件已复制"
+
+      - name: Create CNAME file
+        run: |
+          echo "agricl.drflo.org" > CNAME
+          echo "✓ CNAME 文件已创建（主网站域名：agricl.drflo.org）"
