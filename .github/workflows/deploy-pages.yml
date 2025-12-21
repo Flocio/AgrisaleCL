@@ -20,6 +20,7 @@ jobs:
     if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
     permissions:
       contents: write
+      releases: read
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -69,21 +70,80 @@ jobs:
           else
             echo "切换到 gh-pages 分支..."
             git checkout gh-pages
+            # 只清理网站文件和 latest.json，保留旧版本的下载文件
+            rm -f index.html downloads/index.html downloads/api/latest.json CNAME
+            # 保留 downloads/{android,ios,macos,windows} 目录中的旧版本文件
           fi
-          
-          # 清理旧文件（保留 .git）
-          find . -maxdepth 1 ! -name '.git' ! -name '.' -exec rm -rf {} +
 
       - name: Create directory structure
         run: |
           mkdir -p downloads/{android,ios,macos,windows,api}
           echo "✓ 目录结构已创建"
 
+      - name: Download and preserve old version files from GitHub Releases
+        run: |
+          echo "=== 从 GitHub Release 下载并保留旧版本文件 ==="
+          # 获取所有 release 标签
+          RELEASES=$(gh release list --limit 10 --json tagName --jq '.[].tagName' || echo "")
+          
+          if [ -z "$RELEASES" ]; then
+            echo "⚠️ 无法获取 release 列表，跳过旧版本文件下载"
+            exit 0
+          fi
+          
+          # 为每个 release 下载文件（如果本地不存在）
+          for TAG in $RELEASES; do
+            echo "检查版本: $TAG"
+            
+            # Android APK
+            APK_FILE="downloads/android/agrisalecl-android-${TAG}.apk"
+            if [ ! -f "$APK_FILE" ]; then
+              echo "  下载 Android APK: $TAG"
+              gh release download "$TAG" -p "agrisalecl-android-${TAG}.apk" -D "downloads/android/" 2>/dev/null || true
+            fi
+            
+            # Android AAB
+            AAB_FILE="downloads/android/agrisalecl-android-${TAG}.aab"
+            if [ ! -f "$AAB_FILE" ]; then
+              echo "  下载 Android AAB: $TAG"
+              gh release download "$TAG" -p "agrisalecl-android-${TAG}.aab" -D "downloads/android/" 2>/dev/null || true
+            fi
+            
+            # iOS IPA
+            IPA_FILE="downloads/ios/agrisalecl-ios-${TAG}.ipa"
+            if [ ! -f "$IPA_FILE" ]; then
+              echo "  下载 iOS IPA: $TAG"
+              gh release download "$TAG" -p "agrisalecl-ios-${TAG}.ipa" -D "downloads/ios/" 2>/dev/null || true
+            fi
+            
+            # macOS ZIP
+            MACOS_FILE="downloads/macos/agrisalecl-macos-${TAG}.zip"
+            if [ ! -f "$MACOS_FILE" ]; then
+              echo "  下载 macOS ZIP: $TAG"
+              gh release download "$TAG" -p "agrisalecl-macos-${TAG}.zip" -D "downloads/macos/" 2>/dev/null || true
+            fi
+            
+            # Windows ZIP
+            WINDOWS_FILE="downloads/windows/agrisalecl-windows-${TAG}.zip"
+            if [ ! -f "$WINDOWS_FILE" ]; then
+              echo "  下载 Windows ZIP: $TAG"
+              gh release download "$TAG" -p "agrisalecl-windows-${TAG}.zip" -D "downloads/windows/" 2>/dev/null || true
+            fi
+          done
+          
+          echo "✓ 旧版本文件检查完成"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
       - name: Copy build artifacts
         run: |
           echo "=== 复制构建产物 ==="
           
-          # 复制 Android APK
+          # 确保目录存在
+          mkdir -p downloads/android downloads/ios downloads/macos downloads/windows
+          
+          # 复制 Android APK（保留旧版本文件）
           if [ -f "artifacts/Android-APK/agrisalecl-android-${{ env.VERSION_TAG }}.apk" ]; then
             cp artifacts/Android-APK/agrisalecl-android-${{ env.VERSION_TAG }}.apk downloads/android/
             echo "✓ Android APK 已复制"
