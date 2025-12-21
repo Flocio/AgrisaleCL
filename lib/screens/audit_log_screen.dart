@@ -20,8 +20,10 @@ class _AuditLogScreenState extends State<AuditLogScreen> {
   List<AuditLog> _logs = [];
   bool _isLoading = false;
   bool _hasMore = true;
+  bool _isLoadingMore = false; // 是否正在加载更多
   int _currentPage = 1;
   final int _pageSize = 20;
+  int _total = 0; // 总记录数
   
   // 筛选条件
   OperationType? _selectedOperationType;
@@ -97,15 +99,18 @@ class _AuditLogScreenState extends State<AuditLogScreen> {
       setState(() {
         if (_currentPage == 1) {
           _logs = response.items;
+          _total = response.total; // 更新总数
         } else {
           _logs.addAll(response.items);
         }
         _hasMore = response.hasNextPage;
         _isLoading = false;
+        _isLoadingMore = false; // 确保加载更多标志被重置
       });
     } on ApiError catch (e) {
       setState(() {
         _isLoading = false;
+        _isLoadingMore = false; // 重置加载更多标志
       });
       if (mounted) {
         context.showErrorSnackBar('加载日志失败: ${e.message}');
@@ -113,6 +118,7 @@ class _AuditLogScreenState extends State<AuditLogScreen> {
     } catch (e) {
       setState(() {
         _isLoading = false;
+        _isLoadingMore = false; // 重置加载更多标志
       });
       if (mounted) {
         context.showErrorSnackBar('加载日志失败: ${e.toString()}');
@@ -121,11 +127,24 @@ class _AuditLogScreenState extends State<AuditLogScreen> {
   }
   
   Future<void> _loadMore() async {
-    if (!_isLoading && _hasMore) {
-      setState(() {
-        _currentPage++;
-      });
+    // 防止重复加载
+    if (_isLoadingMore || _isLoading || !_hasMore) {
+      return;
+    }
+    
+    setState(() {
+      _isLoadingMore = true;
+      _currentPage++;
+    });
+    
+    try {
       await _fetchLogs();
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingMore = false;
+        });
+      }
     }
   }
   
@@ -223,22 +242,41 @@ class _AuditLogScreenState extends State<AuditLogScreen> {
               controller: _searchController,
               decoration: InputDecoration(
                 hintText: '搜索实体名称、备注...',
-                prefixIcon: Icon(Icons.search),
+                prefixIcon: Icon(Icons.search, color: Colors.grey[600]),
                 suffixIcon: _searchText.isNotEmpty
                     ? IconButton(
-                        icon: Icon(Icons.clear),
+                        icon: Icon(Icons.clear, color: Colors.grey[600]),
                         onPressed: () {
                           _searchController.clear();
-                          _searchText = '';
-                          _currentPage = 1;
+                          setState(() {
+                            _searchText = '';
+                            _currentPage = 1;
+                          });
                           _fetchLogs();
+                          FocusScope.of(context).unfocus();
                         },
                       )
                     : null,
+                contentPadding: EdgeInsets.symmetric(vertical: 0, horizontal: 16),
+                filled: true,
+                fillColor: Colors.grey[100],
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(24),
+                  borderSide: BorderSide(color: Colors.grey[300]!),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(24),
+                  borderSide: BorderSide(color: Colors.grey[300]!),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(24),
+                  borderSide: BorderSide(color: Colors.green),
                 ),
               ),
+              textInputAction: TextInputAction.search,
+              onEditingComplete: () {
+                FocusScope.of(context).unfocus();
+              },
             ),
           ),
           
@@ -320,7 +358,7 @@ class _AuditLogScreenState extends State<AuditLogScreen> {
                 Icon(Icons.history, color: Colors.grey[700], size: 20),
                 SizedBox(width: 8),
                 Text(
-                  '操作记录 (${_logs.length}${_hasMore ? '+' : ''})',
+                  '操作记录 ($_total)',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
@@ -377,7 +415,10 @@ class _AuditLogScreenState extends State<AuditLogScreen> {
                           itemBuilder: (context, index) {
                             if (index == _logs.length) {
                               // 加载更多指示器
-                              _loadMore();
+                              // 延迟调用，避免在构建时立即触发
+                              WidgetsBinding.instance.addPostFrameCallback((_) {
+                                _loadMore();
+                              });
                               return Center(
                                 child: Padding(
                                   padding: EdgeInsets.all(16),
