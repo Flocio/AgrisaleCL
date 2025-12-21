@@ -27,8 +27,20 @@ class ApiError implements Exception {
 
   /// 从 HTTP 响应创建 ApiError
   factory ApiError.fromHttpResponse(int statusCode, Map<String, dynamic>? json) {
+    // FastAPI 的 HTTPException 返回 {"detail": "错误信息"}
+    // 我们的 BaseResponse 返回 {"message": "错误信息"}
+    // 优先使用 message，如果没有则使用 detail
+    String errorMessage = '请求失败';
+    if (json != null) {
+      if (json['message'] != null) {
+        errorMessage = json['message'].toString();
+      } else if (json['detail'] != null) {
+        errorMessage = json['detail'].toString();
+      }
+    }
+    
     return ApiError(
-      message: json?['message'] ?? '请求失败',
+      message: errorMessage,
       errorCode: json?['error_code'] as String?,
       statusCode: statusCode,
       details: json?['details'] as Map<String, dynamic>?,

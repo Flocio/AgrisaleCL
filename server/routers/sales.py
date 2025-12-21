@@ -484,14 +484,31 @@ async def update_sale(
             # 如果新数量 < 旧数量，需要恢复部分库存（差值 > 0）
             quantity_diff = old_quantity - new_quantity  # 注意：这里是反过来的
             
-            # 如果新数量更大（需要减少更多库存），检查库存是否足够
-            if new_quantity > old_quantity:
-                additional_needed = new_quantity - old_quantity
-                if current_stock < additional_needed:
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail=f"库存不足，当前库存: {current_stock}，无法增加销售 {additional_needed}"
-                    )
+            # 如果产品名称改变了，需要分别检查原产品和新产品的库存
+            product_changed = sale_data.productName and sale_data.productName != old_product_name
+            
+            if product_changed:
+                # 如果产品名称改变，需要检查：
+                # 1. 原产品库存恢复不需要检查（销售是减少库存，恢复是增加库存）
+                # 2. 新产品库存是否足够（如果新数量 > 0，需要检查库存是否足够）
+                
+                # 检查新产品库存是否足够
+                if new_quantity > 0:
+                    if current_stock < new_quantity:
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail=f"新产品 '{sale_data.productName}' 库存不足，当前库存: {current_stock}，无法销售 {new_quantity}"
+                        )
+            else:
+                # 产品名称没变，只检查数量差值
+                # 如果新数量更大（需要减少更多库存），检查库存是否足够
+                if new_quantity > old_quantity:
+                    additional_needed = new_quantity - old_quantity
+                    if current_stock < additional_needed:
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail=f"库存不足，当前库存: {current_stock}，无法增加销售 {additional_needed}"
+                        )
             
             # 验证客户（如果修改了客户）
             if sale_data.customerId is not None:
@@ -553,21 +570,14 @@ async def update_sale(
                 """
                 conn.execute(update_sql, tuple(update_values))
                 
-                # 如果数量有变化，更新产品库存
-                if quantity_diff != 0:
-                    # quantity_diff = old_quantity - new_quantity
-                    # 如果 quantity_diff > 0，说明新数量更小，需要恢复库存（增加）
-                    # 如果 quantity_diff < 0，说明新数量更大，需要减少更多库存（减少）
-                    new_stock = current_stock + quantity_diff
-                    if new_stock < 0:
-                        raise HTTPException(
-                            status_code=status.HTTP_400_BAD_REQUEST,
-                            detail="库存不足"
-                        )
-                    
-                    # 如果产品名称改变了，需要恢复原产品的库存
-                    if sale_data.productName and sale_data.productName != old_product_name:
-                        # 恢复原产品库存（增加，因为销售被撤销）
+                # 更新产品库存
+                # product_changed 已在上面计算过
+                quantity_changed = quantity_diff != 0
+                
+                if product_changed or quantity_changed:
+                    # 如果产品名称改变了，需要恢复原产品的库存并更新新产品库存
+                    if product_changed:
+                        # 恢复原产品库存（加上原销售数量，因为销售被撤销）
                         old_product_cursor = conn.execute(
                             "SELECT id, stock, version FROM products WHERE userId = ? AND name = ?",
                             (user_id, old_product_name)
@@ -575,8 +585,8 @@ async def update_sale(
                         old_product = old_product_cursor.fetchone()
                         if old_product:
                             old_product_id, old_product_stock, old_product_version = old_product
-                            old_new_stock = old_product_stock + old_quantity  # 恢复原销售的数量
-                            conn.execute(
+                            old_new_stock = old_product_stock + old_quantity
+                            old_update_cursor = conn.execute(
                                 """
                                 UPDATE products
                                 SET stock = ?, version = version + 1, updated_at = datetime('now')
@@ -584,14 +594,30 @@ async def update_sale(
                                 """,
                                 (old_new_stock, old_product_id, user_id, old_product_version)
                             )
-                            # 检查是否更新成功
-                            if conn.total_changes == 0:
+                            # 检查原产品库存更新是否成功（乐观锁）
+                            if old_update_cursor.rowcount == 0:
                                 raise HTTPException(
                                     status_code=status.HTTP_409_CONFLICT,
                                     detail="原产品库存已被其他操作修改，请刷新后重试"
                                 )
+                        
+                        # 更新新产品库存（减去新销售数量）
+                        new_stock = current_stock - new_quantity
+                    else:
+                        # 产品名称没变，只更新数量差值
+                        # quantity_diff = old_quantity - new_quantity
+                        # 如果 quantity_diff > 0，说明新数量更小，需要恢复库存（增加）
+                        # 如果 quantity_diff < 0，说明新数量更大，需要减少更多库存（减少）
+                        new_stock = current_stock + quantity_diff
                     
-                    # 更新新产品库存（使用乐观锁）
+                    # 检查库存是否足够
+                    if new_stock < 0:
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail="库存不足"
+                        )
+                    
+                    # 更新产品库存（使用乐观锁）
                     update_cursor = conn.execute(
                         """
                         UPDATE products

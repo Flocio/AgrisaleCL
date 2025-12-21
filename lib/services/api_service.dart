@@ -110,10 +110,15 @@ class ApiService {
         json = jsonDecode(response.body) as Map<String, dynamic>;
       }
     } catch (e) {
-      // 如果响应不是 JSON，创建错误响应
+      // 如果响应不是 JSON，尝试从响应体中提取文本信息
+      String errorMessage = '服务器返回了无效的响应格式';
+      if (response.body.isNotEmpty) {
+        // 如果响应体不是 JSON，可能是纯文本错误信息
+        errorMessage = response.body;
+      }
       throw ApiError.server(
         response.statusCode,
-        '服务器返回了无效的响应格式',
+        errorMessage,
       );
     }
 

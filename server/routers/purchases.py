@@ -486,13 +486,44 @@ async def update_purchase(
             # 计算库存变化差值
             quantity_diff = new_quantity - old_quantity
             
-            # 如果是负数变化（减少库存），检查库存是否足够
-            if quantity_diff < 0:
-                if current_stock < abs(quantity_diff):
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail=f"库存不足，当前库存: {current_stock}，无法减少 {abs(quantity_diff)}"
-                    )
+            # 如果产品名称改变了，需要分别检查原产品和新产品的库存
+            product_changed = purchase_data.productName and purchase_data.productName != old_product_name
+            
+            if product_changed:
+                # 如果产品名称改变，需要检查：
+                # 1. 原产品库存是否足够恢复（减去原数量）
+                # 2. 新产品库存是否足够（如果新数量是负数，即采购退货）
+                
+                # 检查原产品库存
+                old_product_cursor = conn.execute(
+                    "SELECT id, stock, version FROM products WHERE userId = ? AND name = ?",
+                    (user_id, old_product_name)
+                )
+                old_product = old_product_cursor.fetchone()
+                if old_product:
+                    old_product_stock = old_product[1]
+                    if old_product_stock < old_quantity:
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail=f"原产品 '{old_product_name}' 库存不足，当前库存: {old_product_stock}，无法恢复 {old_quantity}"
+                        )
+                
+                # 如果新数量是负数（采购退货），检查新产品库存是否足够
+                if new_quantity < 0:
+                    if current_stock < abs(new_quantity):
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail=f"新产品 '{purchase_data.productName}' 库存不足，当前库存: {current_stock}，无法退货 {abs(new_quantity)}"
+                        )
+            else:
+                # 产品名称没变，只检查数量差值
+                # 如果是负数变化（减少库存），检查库存是否足够
+                if quantity_diff < 0:
+                    if current_stock < abs(quantity_diff):
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail=f"库存不足，当前库存: {current_stock}，无法减少 {abs(quantity_diff)}"
+                        )
             
             # 验证供应商（如果修改了供应商）
             # 如果 supplierId 为 0 或 None，表示未分配供应商，允许更新
@@ -557,18 +588,14 @@ async def update_purchase(
                 """
                 conn.execute(update_sql, tuple(update_values))
                 
-                # 如果数量有变化，更新产品库存
-                if quantity_diff != 0:
-                    new_stock = current_stock + quantity_diff
-                    if new_stock < 0:
-                        raise HTTPException(
-                            status_code=status.HTTP_400_BAD_REQUEST,
-                            detail="库存不足"
-                        )
-                    
-                    # 如果产品名称改变了，需要恢复原产品的库存
-                    if purchase_data.productName and purchase_data.productName != old_product_name:
-                        # 恢复原产品库存
+                # 更新产品库存
+                # product_changed 已在上面计算过
+                quantity_changed = quantity_diff != 0
+                
+                if product_changed or quantity_changed:
+                    # 如果产品名称改变了，需要恢复原产品的库存并更新新产品库存
+                    if product_changed:
+                        # 恢复原产品库存（减去原采购数量）
                         old_product_cursor = conn.execute(
                             "SELECT id, stock, version FROM products WHERE userId = ? AND name = ?",
                             (user_id, old_product_name)
@@ -582,7 +609,7 @@ async def update_purchase(
                                     status_code=status.HTTP_400_BAD_REQUEST,
                                     detail="原产品库存不足，无法恢复"
                                 )
-                            conn.execute(
+                            old_update_cursor = conn.execute(
                                 """
                                 UPDATE products
                                 SET stock = ?, version = version + 1, updated_at = datetime('now')
@@ -590,8 +617,27 @@ async def update_purchase(
                                 """,
                                 (old_new_stock, old_product_id, user_id, old_product_version)
                             )
+                            # 检查原产品库存更新是否成功（乐观锁）
+                            if old_update_cursor.rowcount == 0:
+                                raise HTTPException(
+                                    status_code=status.HTTP_409_CONFLICT,
+                                    detail="原产品库存已被其他操作修改，请刷新后重试"
+                                )
+                        
+                        # 更新新产品库存（加上新采购数量）
+                        new_stock = current_stock + new_quantity
+                    else:
+                        # 产品名称没变，只更新数量差值
+                        new_stock = current_stock + quantity_diff
                     
-                    # 更新新产品库存（使用乐观锁）
+                    # 检查库存是否足够
+                    if new_stock < 0:
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail="库存不足"
+                        )
+                    
+                    # 更新产品库存（使用乐观锁）
                     update_cursor = conn.execute(
                         """
                         UPDATE products
