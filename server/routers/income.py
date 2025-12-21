@@ -18,6 +18,7 @@ from server.models import (
     PaginatedResponse,
     DateRangeFilter
 )
+from server.services.audit_log_service import AuditLogService
 
 # 配置日志
 logger = logging.getLogger(__name__)
@@ -307,6 +308,20 @@ async def create_income_record(
                 f"创建进账记录成功: 金额 {income_data.amount} (ID: {income_id}, 用户: {user_id})"
             )
             
+            # 记录操作日志
+            try:
+                entity_name = f"进账记录 (金额: ¥{income_data.amount})"
+                AuditLogService.log_create(
+                    user_id=user_id,
+                    username=current_user.get("username", "unknown"),
+                    entity_type="income",
+                    entity_id=income_id,
+                    entity_name=entity_name,
+                    new_data=income.model_dump()
+                )
+            except Exception as e:
+                logger.warning(f"记录进账创建日志失败: {e}")
+            
             return BaseResponse(
                 success=True,
                 message="创建进账记录成功",
@@ -345,18 +360,37 @@ async def update_income_record(
     
     try:
         with pool.get_connection() as conn:
-            # 检查进账记录是否存在
+            # 获取当前进账记录完整信息用于日志记录
             cursor = conn.execute(
-                "SELECT id FROM income WHERE id = ? AND userId = ?",
+                """
+                SELECT id, userId, incomeDate, customerId, amount, discount, employeeId,
+                       paymentMethod, note, created_at
+                FROM income
+                WHERE id = ? AND userId = ?
+                """,
                 (income_id, user_id)
             )
-            existing_income = cursor.fetchone()
+            row = cursor.fetchone()
             
-            if existing_income is None:
+            if row is None:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="进账记录不存在或无权限访问"
                 )
+            
+            # 保存旧数据用于日志记录
+            old_data = {
+                "id": row[0],
+                "userId": row[1],
+                "incomeDate": row[2],
+                "customerId": row[3],
+                "amount": row[4],
+                "discount": row[5] if row[5] else 0.0,
+                "employeeId": row[6],
+                "paymentMethod": row[7],
+                "note": row[8],
+                "created_at": row[9]
+            }
             
             # 验证客户是否存在（如果修改了客户）
             if income_data.customerId is not None:
@@ -461,6 +495,21 @@ async def update_income_record(
             
             logger.info(f"更新进账记录成功: {income_id} (用户: {user_id})")
             
+            # 记录操作日志
+            try:
+                entity_name = f"进账记录 (金额: ¥{income.amount})"
+                AuditLogService.log_update(
+                    user_id=user_id,
+                    username=current_user.get("username", "unknown"),
+                    entity_type="income",
+                    entity_id=income_id,
+                    entity_name=entity_name,
+                    old_data=old_data,
+                    new_data=income.model_dump()
+                )
+            except Exception as e:
+                logger.warning(f"记录进账更新日志失败: {e}")
+            
             return BaseResponse(
                 success=True,
                 message="更新进账记录成功",
@@ -497,18 +546,38 @@ async def delete_income_record(
     
     try:
         with pool.get_connection() as conn:
-            # 检查进账记录是否存在
+            # 获取进账记录完整信息用于日志记录
             cursor = conn.execute(
-                "SELECT amount FROM income WHERE id = ? AND userId = ?",
+                """
+                SELECT id, userId, incomeDate, customerId, amount, discount, employeeId,
+                       paymentMethod, note, created_at
+                FROM income
+                WHERE id = ? AND userId = ?
+                """,
                 (income_id, user_id)
             )
-            income = cursor.fetchone()
+            row = cursor.fetchone()
             
-            if income is None:
+            if row is None:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="进账记录不存在或无权限访问"
                 )
+            
+            # 保存旧数据用于日志记录
+            old_data = {
+                "id": row[0],
+                "userId": row[1],
+                "incomeDate": row[2],
+                "customerId": row[3],
+                "amount": row[4],
+                "discount": row[5] if row[5] else 0.0,
+                "employeeId": row[6],
+                "paymentMethod": row[7],
+                "note": row[8],
+                "created_at": row[9]
+            }
+            amount = row[4]
             
             # 删除进账记录
             conn.execute(
@@ -517,7 +586,21 @@ async def delete_income_record(
             )
             conn.commit()
             
-            logger.info(f"删除进账记录成功: 金额 {income[0]} (ID: {income_id}, 用户: {user_id})")
+            logger.info(f"删除进账记录成功: 金额 {amount} (ID: {income_id}, 用户: {user_id})")
+            
+            # 记录操作日志
+            try:
+                entity_name = f"进账记录 (金额: ¥{amount})"
+                AuditLogService.log_delete(
+                    user_id=user_id,
+                    username=current_user.get("username", "unknown"),
+                    entity_type="income",
+                    entity_id=income_id,
+                    entity_name=entity_name,
+                    old_data=old_data
+                )
+            except Exception as e:
+                logger.warning(f"记录进账删除日志失败: {e}")
             
             return BaseResponse(
                 success=True,

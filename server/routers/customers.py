@@ -17,6 +17,7 @@ from server.models import (
     PaginationParams,
     PaginatedResponse
 )
+from server.services.audit_log_service import AuditLogService
 
 # 配置日志
 logger = logging.getLogger(__name__)
@@ -306,6 +307,19 @@ async def create_customer(
             
             logger.info(f"创建客户成功: {customer_data.name} (ID: {customer_id}, 用户: {user_id})")
             
+            # 记录操作日志
+            try:
+                AuditLogService.log_create(
+                    user_id=user_id,
+                    username=current_user.get("username", "unknown"),
+                    entity_type="customer",
+                    entity_id=customer_id,
+                    entity_name=customer_data.name,
+                    new_data=customer.model_dump()
+                )
+            except Exception as e:
+                logger.warning(f"记录客户创建日志失败: {e}")
+            
             return BaseResponse(
                 success=True,
                 message="创建客户成功",
@@ -344,21 +358,35 @@ async def update_customer(
     
     try:
         with pool.get_connection() as conn:
-            # 检查客户是否存在
+            # 获取当前客户完整信息用于日志记录
             cursor = conn.execute(
-                "SELECT name FROM customers WHERE id = ? AND userId = ?",
+                """
+                SELECT id, userId, name, note, created_at, updated_at
+                FROM customers
+                WHERE id = ? AND userId = ?
+                """,
                 (customer_id, user_id)
             )
-            existing_customer = cursor.fetchone()
+            row = cursor.fetchone()
             
-            if existing_customer is None:
+            if row is None:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="客户不存在或无权限访问"
                 )
             
+            # 保存旧数据用于日志记录
+            old_data = {
+                "id": row[0],
+                "userId": row[1],
+                "name": row[2],
+                "note": row[3],
+                "created_at": row[4],
+                "updated_at": row[5]
+            }
+            
             # 检查客户名称唯一性（如果修改了名称）
-            if customer_data.name and customer_data.name != existing_customer[0]:
+            if customer_data.name and customer_data.name != row[2]:
                 name_cursor = conn.execute(
                     "SELECT id FROM customers WHERE userId = ? AND name = ? AND id != ?",
                     (user_id, customer_data.name, customer_id)
@@ -423,6 +451,20 @@ async def update_customer(
             
             logger.info(f"更新客户成功: {customer_id} (用户: {user_id})")
             
+            # 记录操作日志
+            try:
+                AuditLogService.log_update(
+                    user_id=user_id,
+                    username=current_user.get("username", "unknown"),
+                    entity_type="customer",
+                    entity_id=customer_id,
+                    entity_name=customer.name,
+                    old_data=old_data,
+                    new_data=customer.model_dump()
+                )
+            except Exception as e:
+                logger.warning(f"记录客户更新日志失败: {e}")
+            
             return BaseResponse(
                 success=True,
                 message="更新客户成功",
@@ -461,18 +503,33 @@ async def delete_customer(
     
     try:
         with pool.get_connection() as conn:
-            # 检查客户是否存在
+            # 获取客户完整信息用于日志记录
             cursor = conn.execute(
-                "SELECT name FROM customers WHERE id = ? AND userId = ?",
+                """
+                SELECT id, userId, name, note, created_at, updated_at
+                FROM customers
+                WHERE id = ? AND userId = ?
+                """,
                 (customer_id, user_id)
             )
-            customer = cursor.fetchone()
+            row = cursor.fetchone()
             
-            if customer is None:
+            if row is None:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="客户不存在或无权限访问"
                 )
+            
+            # 保存旧数据用于日志记录
+            old_data = {
+                "id": row[0],
+                "userId": row[1],
+                "name": row[2],
+                "note": row[3],
+                "created_at": row[4],
+                "updated_at": row[5]
+            }
+            customer_name = row[2]
             
             # 删除客户（外键约束会自动将相关记录的 customerId 设置为 NULL）
             conn.execute(
@@ -481,7 +538,20 @@ async def delete_customer(
             )
             conn.commit()
             
-            logger.info(f"删除客户成功: {customer[0]} (ID: {customer_id}, 用户: {user_id})")
+            logger.info(f"删除客户成功: {customer_name} (ID: {customer_id}, 用户: {user_id})")
+            
+            # 记录操作日志
+            try:
+                AuditLogService.log_delete(
+                    user_id=user_id,
+                    username=current_user.get("username", "unknown"),
+                    entity_type="customer",
+                    entity_id=customer_id,
+                    entity_name=customer_name,
+                    old_data=old_data
+                )
+            except Exception as e:
+                logger.warning(f"记录客户删除日志失败: {e}")
             
             return BaseResponse(
                 success=True,

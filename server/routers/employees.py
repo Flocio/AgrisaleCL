@@ -17,6 +17,7 @@ from server.models import (
     PaginationParams,
     PaginatedResponse
 )
+from server.services.audit_log_service import AuditLogService
 
 # 配置日志
 logger = logging.getLogger(__name__)
@@ -306,6 +307,19 @@ async def create_employee(
             
             logger.info(f"创建员工成功: {employee_data.name} (ID: {employee_id}, 用户: {user_id})")
             
+            # 记录操作日志
+            try:
+                AuditLogService.log_create(
+                    user_id=user_id,
+                    username=current_user.get("username", "unknown"),
+                    entity_type="employee",
+                    entity_id=employee_id,
+                    entity_name=employee_data.name,
+                    new_data=employee.model_dump()
+                )
+            except Exception as e:
+                logger.warning(f"记录员工创建日志失败: {e}")
+            
             return BaseResponse(
                 success=True,
                 message="创建员工成功",
@@ -344,21 +358,35 @@ async def update_employee(
     
     try:
         with pool.get_connection() as conn:
-            # 检查员工是否存在
+            # 获取当前员工完整信息用于日志记录
             cursor = conn.execute(
-                "SELECT name FROM employees WHERE id = ? AND userId = ?",
+                """
+                SELECT id, userId, name, note, created_at, updated_at
+                FROM employees
+                WHERE id = ? AND userId = ?
+                """,
                 (employee_id, user_id)
             )
-            existing_employee = cursor.fetchone()
+            row = cursor.fetchone()
             
-            if existing_employee is None:
+            if row is None:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="员工不存在或无权限访问"
                 )
             
+            # 保存旧数据用于日志记录
+            old_data = {
+                "id": row[0],
+                "userId": row[1],
+                "name": row[2],
+                "note": row[3],
+                "created_at": row[4],
+                "updated_at": row[5]
+            }
+            
             # 检查员工名称唯一性（如果修改了名称）
-            if employee_data.name and employee_data.name != existing_employee[0]:
+            if employee_data.name and employee_data.name != row[2]:
                 name_cursor = conn.execute(
                     "SELECT id FROM employees WHERE userId = ? AND name = ? AND id != ?",
                     (user_id, employee_data.name, employee_id)
@@ -423,6 +451,20 @@ async def update_employee(
             
             logger.info(f"更新员工成功: {employee_id} (用户: {user_id})")
             
+            # 记录操作日志
+            try:
+                AuditLogService.log_update(
+                    user_id=user_id,
+                    username=current_user.get("username", "unknown"),
+                    entity_type="employee",
+                    entity_id=employee_id,
+                    entity_name=employee.name,
+                    old_data=old_data,
+                    new_data=employee.model_dump()
+                )
+            except Exception as e:
+                logger.warning(f"记录员工更新日志失败: {e}")
+            
             return BaseResponse(
                 success=True,
                 message="更新员工成功",
@@ -461,18 +503,33 @@ async def delete_employee(
     
     try:
         with pool.get_connection() as conn:
-            # 检查员工是否存在
+            # 获取员工完整信息用于日志记录
             cursor = conn.execute(
-                "SELECT name FROM employees WHERE id = ? AND userId = ?",
+                """
+                SELECT id, userId, name, note, created_at, updated_at
+                FROM employees
+                WHERE id = ? AND userId = ?
+                """,
                 (employee_id, user_id)
             )
-            employee = cursor.fetchone()
+            row = cursor.fetchone()
             
-            if employee is None:
+            if row is None:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="员工不存在或无权限访问"
                 )
+            
+            # 保存旧数据用于日志记录
+            old_data = {
+                "id": row[0],
+                "userId": row[1],
+                "name": row[2],
+                "note": row[3],
+                "created_at": row[4],
+                "updated_at": row[5]
+            }
+            employee_name = row[2]
             
             # 删除员工（外键约束会自动将相关记录的 employeeId 设置为 NULL）
             conn.execute(
@@ -481,7 +538,20 @@ async def delete_employee(
             )
             conn.commit()
             
-            logger.info(f"删除员工成功: {employee[0]} (ID: {employee_id}, 用户: {user_id})")
+            logger.info(f"删除员工成功: {employee_name} (ID: {employee_id}, 用户: {user_id})")
+            
+            # 记录操作日志
+            try:
+                AuditLogService.log_delete(
+                    user_id=user_id,
+                    username=current_user.get("username", "unknown"),
+                    entity_type="employee",
+                    entity_id=employee_id,
+                    entity_name=employee_name,
+                    old_data=old_data
+                )
+            except Exception as e:
+                logger.warning(f"记录员工删除日志失败: {e}")
             
             return BaseResponse(
                 success=True,

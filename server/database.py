@@ -128,11 +128,13 @@ class SQLiteConnectionPool:
                     # 首次创建数据库
                     logger.info("首次创建数据库，执行初始化脚本...")
                     self._create_tables(conn)
-                    self._set_version(conn, 16)
+                    self._set_version(conn, 17)
                 else:
                     # 升级数据库
                     logger.info(f"数据库版本: {version}, 检查是否需要升级...")
-                    self._upgrade_database(conn, version, 16)
+                    self._upgrade_database(conn, version, 17)
+                    # 无论版本如何，都检查并修复 user_settings 表的列（兼容性修复）
+                    self._ensure_user_settings_columns(conn)
         except Exception as e:
             logger.error(f"数据库初始化失败: {e}")
             raise
@@ -330,6 +332,27 @@ class SQLiteConnectionPool:
                 FOREIGN KEY (userId) REFERENCES users (id) ON DELETE CASCADE)
         ''')
         
+        # 操作日志表
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS operation_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                userId INTEGER NOT NULL,
+                username TEXT NOT NULL,
+                operation_type TEXT NOT NULL CHECK(operation_type IN ('CREATE', 'UPDATE', 'DELETE')),
+                entity_type TEXT NOT NULL,
+                entity_id INTEGER,
+                entity_name TEXT,
+                old_data TEXT,
+                new_data TEXT,
+                changes TEXT,
+                ip_address TEXT,
+                device_info TEXT,
+                operation_time TEXT DEFAULT (datetime('now')),
+                note TEXT,
+                FOREIGN KEY (userId) REFERENCES users (id) ON DELETE CASCADE
+            )
+        ''')
+        
         # 创建索引以提高查询性能
         conn.execute('CREATE INDEX IF NOT EXISTS idx_products_userId ON products(userId)')
         conn.execute('CREATE INDEX IF NOT EXISTS idx_purchases_userId ON purchases(userId)')
@@ -337,6 +360,9 @@ class SQLiteConnectionPool:
         conn.execute('CREATE INDEX IF NOT EXISTS idx_returns_userId ON returns(userId)')
         conn.execute('CREATE INDEX IF NOT EXISTS idx_income_userId ON income(userId)')
         conn.execute('CREATE INDEX IF NOT EXISTS idx_remittance_userId ON remittance(userId)')
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_logs_userId_time ON operation_logs(userId, operation_time DESC)')
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_logs_entity ON operation_logs(entity_type, entity_id)')
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_logs_type ON operation_logs(operation_type)')
         
         conn.commit()
         logger.info("数据库表创建完成")
@@ -345,6 +371,24 @@ class SQLiteConnectionPool:
         """设置数据库版本"""
         conn.execute(f"PRAGMA user_version = {version}")
         conn.commit()
+    
+    def _ensure_user_settings_columns(self, conn: sqlite3.Connection):
+        """确保 user_settings 表有所有必需的列（兼容性修复）"""
+        try:
+            cursor = conn.execute("PRAGMA table_info(user_settings)")
+            columns = [row[1] for row in cursor.fetchall()]
+            
+            if 'notify_device_online' not in columns:
+                logger.info("补充添加 notify_device_online 列到 user_settings 表")
+                conn.execute('ALTER TABLE user_settings ADD COLUMN notify_device_online INTEGER DEFAULT 1')
+                conn.commit()
+            
+            if 'notify_device_offline' not in columns:
+                logger.info("补充添加 notify_device_offline 列到 user_settings 表")
+                conn.execute('ALTER TABLE user_settings ADD COLUMN notify_device_offline INTEGER DEFAULT 1')
+                conn.commit()
+        except Exception as e:
+            logger.warning(f"检查 user_settings 表列时出错: {e}")
     
     def _upgrade_database(self, conn: sqlite3.Connection, old_version: int, new_version: int):
         """升级数据库结构"""
@@ -515,6 +559,53 @@ class SQLiteConnectionPool:
                 logger.error(f"升级 online_users 表失败: {e}", exc_info=True)
                 raise
         
+        # 版本 17: 添加操作日志表，并确保 user_settings 表有所有必需的列
+        if old_version < 17:
+            logger.info("升级到版本 17: 添加操作日志表，并确保 user_settings 表完整性")
+            try:
+                # 确保 user_settings 表有所有必需的列（兼容性修复）
+                cursor = conn.execute("PRAGMA table_info(user_settings)")
+                columns = [row[1] for row in cursor.fetchall()]
+                
+                if 'notify_device_online' not in columns:
+                    logger.info("添加 notify_device_online 列到 user_settings 表")
+                    conn.execute('ALTER TABLE user_settings ADD COLUMN notify_device_online INTEGER DEFAULT 1')
+                
+                if 'notify_device_offline' not in columns:
+                    logger.info("添加 notify_device_offline 列到 user_settings 表")
+                    conn.execute('ALTER TABLE user_settings ADD COLUMN notify_device_offline INTEGER DEFAULT 1')
+                
+                # 创建操作日志表
+                conn.execute('''
+                    CREATE TABLE IF NOT EXISTS operation_logs (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        userId INTEGER NOT NULL,
+                        username TEXT NOT NULL,
+                        operation_type TEXT NOT NULL CHECK(operation_type IN ('CREATE', 'UPDATE', 'DELETE')),
+                        entity_type TEXT NOT NULL,
+                        entity_id INTEGER,
+                        entity_name TEXT,
+                        old_data TEXT,
+                        new_data TEXT,
+                        changes TEXT,
+                        ip_address TEXT,
+                        device_info TEXT,
+                        operation_time TEXT DEFAULT (datetime('now')),
+                        note TEXT,
+                        FOREIGN KEY (userId) REFERENCES users (id) ON DELETE CASCADE
+                    )
+                ''')
+                logger.info("已创建 operation_logs 表")
+                
+                # 创建索引
+                conn.execute('CREATE INDEX IF NOT EXISTS idx_logs_userId_time ON operation_logs(userId, operation_time DESC)')
+                conn.execute('CREATE INDEX IF NOT EXISTS idx_logs_entity ON operation_logs(entity_type, entity_id)')
+                conn.execute('CREATE INDEX IF NOT EXISTS idx_logs_type ON operation_logs(operation_type)')
+                logger.info("已创建 operation_logs 表的索引")
+            except Exception as e:
+                logger.error(f"升级到版本 17 失败: {e}", exc_info=True)
+                raise
+        
         # 版本 13: 修改 online_users 表支持多设备
         if old_version < 13:
             logger.info("升级到版本 13: 修改 online_users 表支持多设备")
@@ -548,7 +639,35 @@ class SQLiteConnectionPool:
         conn.execute('CREATE INDEX IF NOT EXISTS idx_products_userId ON products(userId)')
         conn.execute('CREATE INDEX IF NOT EXISTS idx_purchases_userId ON purchases(userId)')
         conn.execute('CREATE INDEX IF NOT EXISTS idx_sales_userId ON sales(userId)')
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_returns_userId ON returns(userId)')
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_income_userId ON income(userId)')
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_remittance_userId ON remittance(userId)')
         
+        # 确保 user_settings 表有所有必需的列（兼容性修复，防止遗漏）
+        try:
+            cursor = conn.execute("PRAGMA table_info(user_settings)")
+            columns = [row[1] for row in cursor.fetchall()]
+            
+            if 'notify_device_online' not in columns:
+                logger.info("补充添加 notify_device_online 列到 user_settings 表")
+                conn.execute('ALTER TABLE user_settings ADD COLUMN notify_device_online INTEGER DEFAULT 1')
+            
+            if 'notify_device_offline' not in columns:
+                logger.info("补充添加 notify_device_offline 列到 user_settings 表")
+                conn.execute('ALTER TABLE user_settings ADD COLUMN notify_device_offline INTEGER DEFAULT 1')
+        except Exception as e:
+            logger.debug(f"检查 user_settings 表列时出错: {e}")
+
+        # 确保操作日志表的索引存在（如果表已存在）
+        try:
+            cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='operation_logs'")
+            if cursor.fetchone():
+                conn.execute('CREATE INDEX IF NOT EXISTS idx_logs_userId_time ON operation_logs(userId, operation_time DESC)')
+                conn.execute('CREATE INDEX IF NOT EXISTS idx_logs_entity ON operation_logs(entity_type, entity_id)')
+                conn.execute('CREATE INDEX IF NOT EXISTS idx_logs_type ON operation_logs(operation_type)')
+        except Exception as e:
+            logger.debug(f"创建操作日志索引时出错（可能表不存在）: {e}")
+
         self._set_version(conn, new_version)
         conn.commit()
         logger.info("数据库升级完成")

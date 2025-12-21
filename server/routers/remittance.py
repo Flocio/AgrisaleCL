@@ -18,6 +18,7 @@ from server.models import (
     PaginatedResponse,
     DateRangeFilter
 )
+from server.services.audit_log_service import AuditLogService
 
 # 配置日志
 logger = logging.getLogger(__name__)
@@ -303,6 +304,20 @@ async def create_remittance_record(
                 f"创建汇款记录成功: 金额 {remittance_data.amount} (ID: {remittance_id}, 用户: {user_id})"
             )
             
+            # 记录操作日志
+            try:
+                entity_name = f"汇款记录 (金额: ¥{remittance_data.amount})"
+                AuditLogService.log_create(
+                    user_id=user_id,
+                    username=current_user.get("username", "unknown"),
+                    entity_type="remittance",
+                    entity_id=remittance_id,
+                    entity_name=entity_name,
+                    new_data=remittance.model_dump()
+                )
+            except Exception as e:
+                logger.warning(f"记录汇款创建日志失败: {e}")
+            
             return BaseResponse(
                 success=True,
                 message="创建汇款记录成功",
@@ -341,18 +356,36 @@ async def update_remittance_record(
     
     try:
         with pool.get_connection() as conn:
-            # 检查汇款记录是否存在
+            # 获取当前汇款记录完整信息用于日志记录
             cursor = conn.execute(
-                "SELECT id FROM remittance WHERE id = ? AND userId = ?",
+                """
+                SELECT id, userId, remittanceDate, supplierId, amount, employeeId,
+                       paymentMethod, note, created_at
+                FROM remittance
+                WHERE id = ? AND userId = ?
+                """,
                 (remittance_id, user_id)
             )
-            existing_remittance = cursor.fetchone()
+            row = cursor.fetchone()
             
-            if existing_remittance is None:
+            if row is None:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="汇款记录不存在或无权限访问"
                 )
+            
+            # 保存旧数据用于日志记录
+            old_data = {
+                "id": row[0],
+                "userId": row[1],
+                "remittanceDate": row[2],
+                "supplierId": row[3],
+                "amount": row[4],
+                "employeeId": row[5],
+                "paymentMethod": row[6],
+                "note": row[7],
+                "created_at": row[8]
+            }
             
             # 验证供应商是否存在（如果修改了供应商）
             if remittance_data.supplierId is not None:
@@ -452,6 +485,21 @@ async def update_remittance_record(
             
             logger.info(f"更新汇款记录成功: {remittance_id} (用户: {user_id})")
             
+            # 记录操作日志
+            try:
+                entity_name = f"汇款记录 (金额: ¥{remittance.amount})"
+                AuditLogService.log_update(
+                    user_id=user_id,
+                    username=current_user.get("username", "unknown"),
+                    entity_type="remittance",
+                    entity_id=remittance_id,
+                    entity_name=entity_name,
+                    old_data=old_data,
+                    new_data=remittance.model_dump()
+                )
+            except Exception as e:
+                logger.warning(f"记录汇款更新日志失败: {e}")
+            
             return BaseResponse(
                 success=True,
                 message="更新汇款记录成功",
@@ -488,18 +536,37 @@ async def delete_remittance_record(
     
     try:
         with pool.get_connection() as conn:
-            # 检查汇款记录是否存在
+            # 获取汇款记录完整信息用于日志记录
             cursor = conn.execute(
-                "SELECT amount FROM remittance WHERE id = ? AND userId = ?",
+                """
+                SELECT id, userId, remittanceDate, supplierId, amount, employeeId,
+                       paymentMethod, note, created_at
+                FROM remittance
+                WHERE id = ? AND userId = ?
+                """,
                 (remittance_id, user_id)
             )
-            remittance = cursor.fetchone()
+            row = cursor.fetchone()
             
-            if remittance is None:
+            if row is None:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="汇款记录不存在或无权限访问"
                 )
+            
+            # 保存旧数据用于日志记录
+            old_data = {
+                "id": row[0],
+                "userId": row[1],
+                "remittanceDate": row[2],
+                "supplierId": row[3],
+                "amount": row[4],
+                "employeeId": row[5],
+                "paymentMethod": row[6],
+                "note": row[7],
+                "created_at": row[8]
+            }
+            amount = row[4]
             
             # 删除汇款记录
             conn.execute(
@@ -508,7 +575,21 @@ async def delete_remittance_record(
             )
             conn.commit()
             
-            logger.info(f"删除汇款记录成功: 金额 {remittance[0]} (ID: {remittance_id}, 用户: {user_id})")
+            logger.info(f"删除汇款记录成功: 金额 {amount} (ID: {remittance_id}, 用户: {user_id})")
+            
+            # 记录操作日志
+            try:
+                entity_name = f"汇款记录 (金额: ¥{amount})"
+                AuditLogService.log_delete(
+                    user_id=user_id,
+                    username=current_user.get("username", "unknown"),
+                    entity_type="remittance",
+                    entity_id=remittance_id,
+                    entity_name=entity_name,
+                    old_data=old_data
+                )
+            except Exception as e:
+                logger.warning(f"记录汇款删除日志失败: {e}")
             
             return BaseResponse(
                 success=True,

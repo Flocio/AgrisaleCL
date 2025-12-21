@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field, validator
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from enum import Enum
+import json
 
 
 # ==================== 枚举类型 ====================
@@ -650,4 +651,78 @@ def rows_to_dicts(rows) -> List[dict]:
         字典列表
     """
     return [dict(row) for row in rows] if rows else []
+
+
+# ==================== 操作日志相关模型 ====================
+
+class OperationType(str, Enum):
+    """操作类型"""
+    CREATE = "CREATE"
+    UPDATE = "UPDATE"
+    DELETE = "DELETE"
+
+
+class EntityType(str, Enum):
+    """实体类型"""
+    PRODUCT = "product"
+    CUSTOMER = "customer"
+    SUPPLIER = "supplier"
+    EMPLOYEE = "employee"
+    PURCHASE = "purchase"
+    SALE = "sale"
+    RETURN = "return"
+    INCOME = "income"
+    REMITTANCE = "remittance"
+
+
+class AuditLogCreate(BaseModel):
+    """创建操作日志请求"""
+    operation_type: OperationType = Field(..., description="操作类型")
+    entity_type: str = Field(..., description="实体类型")
+    entity_id: Optional[int] = Field(None, description="实体ID")
+    entity_name: Optional[str] = Field(None, description="实体名称")
+    old_data: Optional[Dict[str, Any]] = Field(None, description="修改前的数据（JSON格式）")
+    new_data: Optional[Dict[str, Any]] = Field(None, description="修改后的数据（JSON格式）")
+    changes: Optional[Dict[str, Any]] = Field(None, description="变更摘要（JSON格式）")
+    ip_address: Optional[str] = Field(None, description="操作IP地址")
+    device_info: Optional[str] = Field(None, description="设备信息")
+    note: Optional[str] = Field(None, description="备注信息")
+
+
+class AuditLogResponse(BaseModel):
+    """操作日志响应"""
+    id: int
+    userId: int
+    username: str
+    operation_type: str
+    entity_type: str
+    entity_id: Optional[int] = None
+    entity_name: Optional[str] = None
+    old_data: Optional[Dict[str, Any]] = None
+    new_data: Optional[Dict[str, Any]] = None
+    changes: Optional[Dict[str, Any]] = None
+    ip_address: Optional[str] = None
+    device_info: Optional[str] = None
+    operation_time: str
+    note: Optional[str] = None
+
+    model_config = {"from_attributes": True}
+
+
+class AuditLogFilter(BaseModel):
+    """操作日志筛选参数"""
+    operation_type: Optional[OperationType] = Field(None, description="操作类型筛选")
+    entity_type: Optional[str] = Field(None, description="实体类型筛选")
+    start_time: Optional[str] = Field(None, description="开始时间（ISO8601格式）")
+    end_time: Optional[str] = Field(None, description="结束时间（ISO8601格式）")
+    search: Optional[str] = Field(None, description="搜索关键词（实体名称、备注）")
+
+
+class AuditLogListResponse(BaseModel):
+    """操作日志列表响应"""
+    logs: List[AuditLogResponse]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
 

@@ -72,7 +72,7 @@ class _VersionInfoScreenState extends State<VersionInfoScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('关于系统', style: TextStyle(
+        title: Text('关于', style: TextStyle(
           fontWeight: FontWeight.bold,
           color: Colors.white,
         )),

@@ -17,6 +17,7 @@ from server.models import (
     PaginationParams,
     PaginatedResponse
 )
+from server.services.audit_log_service import AuditLogService
 
 # 配置日志
 logger = logging.getLogger(__name__)
@@ -306,6 +307,19 @@ async def create_supplier(
             
             logger.info(f"创建供应商成功: {supplier_data.name} (ID: {supplier_id}, 用户: {user_id})")
             
+            # 记录操作日志
+            try:
+                AuditLogService.log_create(
+                    user_id=user_id,
+                    username=current_user.get("username", "unknown"),
+                    entity_type="supplier",
+                    entity_id=supplier_id,
+                    entity_name=supplier_data.name,
+                    new_data=supplier.model_dump()
+                )
+            except Exception as e:
+                logger.warning(f"记录供应商创建日志失败: {e}")
+            
             return BaseResponse(
                 success=True,
                 message="创建供应商成功",
@@ -344,21 +358,35 @@ async def update_supplier(
     
     try:
         with pool.get_connection() as conn:
-            # 检查供应商是否存在
+            # 获取当前供应商完整信息用于日志记录
             cursor = conn.execute(
-                "SELECT name FROM suppliers WHERE id = ? AND userId = ?",
+                """
+                SELECT id, userId, name, note, created_at, updated_at
+                FROM suppliers
+                WHERE id = ? AND userId = ?
+                """,
                 (supplier_id, user_id)
             )
-            existing_supplier = cursor.fetchone()
+            row = cursor.fetchone()
             
-            if existing_supplier is None:
+            if row is None:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="供应商不存在或无权限访问"
                 )
             
+            # 保存旧数据用于日志记录
+            old_data = {
+                "id": row[0],
+                "userId": row[1],
+                "name": row[2],
+                "note": row[3],
+                "created_at": row[4],
+                "updated_at": row[5]
+            }
+            
             # 检查供应商名称唯一性（如果修改了名称）
-            if supplier_data.name and supplier_data.name != existing_supplier[0]:
+            if supplier_data.name and supplier_data.name != row[2]:
                 name_cursor = conn.execute(
                     "SELECT id FROM suppliers WHERE userId = ? AND name = ? AND id != ?",
                     (user_id, supplier_data.name, supplier_id)
@@ -423,6 +451,20 @@ async def update_supplier(
             
             logger.info(f"更新供应商成功: {supplier_id} (用户: {user_id})")
             
+            # 记录操作日志
+            try:
+                AuditLogService.log_update(
+                    user_id=user_id,
+                    username=current_user.get("username", "unknown"),
+                    entity_type="supplier",
+                    entity_id=supplier_id,
+                    entity_name=supplier.name,
+                    old_data=old_data,
+                    new_data=supplier.model_dump()
+                )
+            except Exception as e:
+                logger.warning(f"记录供应商更新日志失败: {e}")
+            
             return BaseResponse(
                 success=True,
                 message="更新供应商成功",
@@ -461,18 +503,33 @@ async def delete_supplier(
     
     try:
         with pool.get_connection() as conn:
-            # 检查供应商是否存在
+            # 获取供应商完整信息用于日志记录
             cursor = conn.execute(
-                "SELECT name FROM suppliers WHERE id = ? AND userId = ?",
+                """
+                SELECT id, userId, name, note, created_at, updated_at
+                FROM suppliers
+                WHERE id = ? AND userId = ?
+                """,
                 (supplier_id, user_id)
             )
-            supplier = cursor.fetchone()
+            row = cursor.fetchone()
             
-            if supplier is None:
+            if row is None:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="供应商不存在或无权限访问"
                 )
+            
+            # 保存旧数据用于日志记录
+            old_data = {
+                "id": row[0],
+                "userId": row[1],
+                "name": row[2],
+                "note": row[3],
+                "created_at": row[4],
+                "updated_at": row[5]
+            }
+            supplier_name = row[2]
             
             # 删除供应商（外键约束会自动将相关记录的 supplierId 设置为 NULL）
             conn.execute(
@@ -481,7 +538,20 @@ async def delete_supplier(
             )
             conn.commit()
             
-            logger.info(f"删除供应商成功: {supplier[0]} (ID: {supplier_id}, 用户: {user_id})")
+            logger.info(f"删除供应商成功: {supplier_name} (ID: {supplier_id}, 用户: {user_id})")
+            
+            # 记录操作日志
+            try:
+                AuditLogService.log_delete(
+                    user_id=user_id,
+                    username=current_user.get("username", "unknown"),
+                    entity_type="supplier",
+                    entity_id=supplier_id,
+                    entity_name=supplier_name,
+                    old_data=old_data
+                )
+            except Exception as e:
+                logger.warning(f"记录供应商删除日志失败: {e}")
             
             return BaseResponse(
                 success=True,

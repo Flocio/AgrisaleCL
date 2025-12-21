@@ -28,7 +28,8 @@ from server.routers import (
     income,
     remittance,
     settings,
-    help
+    help,
+    audit_logs
 )
 
 # 配置日志
@@ -163,6 +164,7 @@ app.include_router(income.router)
 app.include_router(remittance.router)
 app.include_router(settings.router)
 app.include_router(help.router)
+app.include_router(audit_logs.router)
 
 logger.info("所有路由已注册")
 
@@ -234,7 +236,8 @@ async def api_info():
             "employees": "/api/employees",
             "income": "/api/income",
             "remittance": "/api/remittance",
-            "settings": "/api/settings"
+            "settings": "/api/settings",
+            "audit-logs": "/api/audit-logs"
         },
         "docs": "/docs",
         "redoc": "/redoc"

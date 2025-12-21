@@ -18,6 +18,7 @@ from server.models import (
     PaginatedResponse,
     DateRangeFilter
 )
+from server.services.audit_log_service import AuditLogService
 
 # 配置日志
 logger = logging.getLogger(__name__)
@@ -354,6 +355,19 @@ async def create_sale(
                 f"数量: {sale_data.quantity} (ID: {sale_id}, 用户: {user_id})"
             )
             
+            # 记录操作日志
+            try:
+                AuditLogService.log_create(
+                    user_id=user_id,
+                    username=current_user.get("username", "unknown"),
+                    entity_type="sale",
+                    entity_id=sale_id,
+                    entity_name=f"{sale_data.productName} (数量: {sale_data.quantity})",
+                    new_data=sale.model_dump()
+                )
+            except Exception as e:
+                logger.warning(f"记录销售创建日志失败: {e}")
+            
             return BaseResponse(
                 success=True,
                 message="创建销售记录成功",
@@ -420,6 +434,18 @@ async def update_sale(
             
             old_quantity = row[3]
             old_product_name = row[2]
+            
+            # 保存旧数据用于日志记录
+            old_data = {
+                "id": row[0],
+                "userId": row[1],
+                "productName": row[2],
+                "quantity": row[3],
+                "customerId": row[4],
+                "saleDate": row[5],
+                "totalSalePrice": row[6],
+                "note": row[7]
+            }
             
             # 确定新的数量（如果提供了）
             new_quantity = sale_data.quantity if sale_data.quantity is not None else old_quantity
@@ -621,6 +647,21 @@ async def update_sale(
             
             logger.info(f"更新销售记录成功: {sale_id} (用户: {user_id})")
             
+            # 记录操作日志
+            try:
+                entity_name = f"{sale.productName} (数量: {sale.quantity})"
+                AuditLogService.log_update(
+                    user_id=user_id,
+                    username=current_user.get("username", "unknown"),
+                    entity_type="sale",
+                    entity_id=sale_id,
+                    entity_name=entity_name,
+                    old_data=old_data,
+                    new_data=sale.model_dump()
+                )
+            except Exception as e:
+                logger.warning(f"记录销售更新日志失败: {e}")
+            
             return BaseResponse(
                 success=True,
                 message="更新销售记录成功",
@@ -665,25 +706,39 @@ async def delete_sale(
     
     try:
         with pool.get_connection() as conn:
-            # 获取销售记录信息
+            # 获取销售记录完整信息用于日志记录
             cursor = conn.execute(
                 """
-                SELECT id, userId, productName, quantity
+                SELECT id, userId, productName, quantity, customerId, saleDate,
+                       totalSalePrice, note, created_at
                 FROM sales
                 WHERE id = ? AND userId = ?
                 """,
                 (sale_id, user_id)
             )
-            sale = cursor.fetchone()
+            row = cursor.fetchone()
             
-            if sale is None:
+            if row is None:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="销售记录不存在或无权限访问"
                 )
             
-            product_name = sale[2]
-            quantity = sale[3]
+            # 保存旧数据用于日志记录
+            old_data = {
+                "id": row[0],
+                "userId": row[1],
+                "productName": row[2],
+                "quantity": row[3],
+                "customerId": row[4],
+                "saleDate": row[5],
+                "totalSalePrice": row[6],
+                "note": row[7],
+                "created_at": row[8]
+            }
+            
+            product_name = row[2]
+            quantity = row[3]
             
             # 获取产品信息
             product_cursor = conn.execute(
@@ -739,6 +794,20 @@ async def delete_sale(
             conn.commit()
             
             logger.info(f"删除销售记录成功: {product_name} 数量: {quantity} (ID: {sale_id}, 用户: {user_id})")
+            
+            # 记录操作日志
+            try:
+                entity_name = f"{product_name} (数量: {quantity})"
+                AuditLogService.log_delete(
+                    user_id=user_id,
+                    username=current_user.get("username", "unknown"),
+                    entity_type="sale",
+                    entity_id=sale_id,
+                    entity_name=entity_name,
+                    old_data=old_data
+                )
+            except Exception as e:
+                logger.warning(f"记录销售删除日志失败: {e}")
             
             return BaseResponse(
                 success=True,

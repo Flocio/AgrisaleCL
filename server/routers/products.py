@@ -19,6 +19,7 @@ from server.models import (
     PaginatedResponse,
     ProductFilter
 )
+from server.services.audit_log_service import AuditLogService
 
 # 配置日志
 logger = logging.getLogger(__name__)
@@ -294,6 +295,19 @@ async def create_product(
             
             logger.info(f"创建产品成功: {product_data.name} (ID: {product_id}, 用户: {user_id})")
             
+            # 记录操作日志
+            try:
+                AuditLogService.log_create(
+                    user_id=user_id,
+                    username=current_user.get("username", "unknown"),
+                    entity_type="product",
+                    entity_id=product_id,
+                    entity_name=product_data.name,
+                    new_data=product.model_dump()
+                )
+            except Exception as e:
+                logger.warning(f"记录产品创建日志失败: {e}")
+            
             return BaseResponse(
                 success=True,
                 message="创建产品成功",
@@ -350,6 +364,18 @@ async def update_product(
                 )
             
             current_version = row[7] if row[7] else 1
+            
+            # 保存旧数据用于日志记录
+            old_data = {
+                "id": row[0],
+                "userId": row[1],
+                "name": row[2],
+                "description": row[3],
+                "stock": row[4],
+                "unit": row[5],
+                "supplierId": row[6],
+                "version": current_version
+            }
             
             # 乐观锁检查
             if product_data.version is not None and product_data.version != current_version:
@@ -455,6 +481,20 @@ async def update_product(
             
             logger.info(f"更新产品成功: {product_id} (用户: {user_id})")
             
+            # 记录操作日志
+            try:
+                AuditLogService.log_update(
+                    user_id=user_id,
+                    username=current_user.get("username", "unknown"),
+                    entity_type="product",
+                    entity_id=product_id,
+                    entity_name=product.name,
+                    old_data=old_data,
+                    new_data=product.model_dump()
+                )
+            except Exception as e:
+                logger.warning(f"记录产品更新日志失败: {e}")
+            
             return BaseResponse(
                 success=True,
                 message="更新产品成功",
@@ -491,18 +531,38 @@ async def delete_product(
     
     try:
         with pool.get_connection() as conn:
-            # 检查产品是否存在
+            # 获取产品完整信息用于日志记录
             cursor = conn.execute(
-                "SELECT name FROM products WHERE id = ? AND userId = ?",
+                """
+                SELECT id, userId, name, description, stock, unit, supplierId, version,
+                       created_at, updated_at
+                FROM products
+                WHERE id = ? AND userId = ?
+                """,
                 (product_id, user_id)
             )
-            product = cursor.fetchone()
+            row = cursor.fetchone()
             
-            if product is None:
+            if row is None:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="产品不存在或无权限访问"
                 )
+            
+            # 保存旧数据用于日志记录
+            old_data = {
+                "id": row[0],
+                "userId": row[1],
+                "name": row[2],
+                "description": row[3],
+                "stock": row[4],
+                "unit": row[5],
+                "supplierId": row[6],
+                "version": row[7] if row[7] else 1,
+                "created_at": row[8],
+                "updated_at": row[9]
+            }
+            product_name = row[2]
             
             # 删除产品（外键约束会自动处理关联数据）
             conn.execute(
@@ -511,7 +571,20 @@ async def delete_product(
             )
             conn.commit()
             
-            logger.info(f"删除产品成功: {product[0]} (ID: {product_id}, 用户: {user_id})")
+            logger.info(f"删除产品成功: {product_name} (ID: {product_id}, 用户: {user_id})")
+            
+            # 记录操作日志
+            try:
+                AuditLogService.log_delete(
+                    user_id=user_id,
+                    username=current_user.get("username", "unknown"),
+                    entity_type="product",
+                    entity_id=product_id,
+                    entity_name=product_name,
+                    old_data=old_data
+                )
+            except Exception as e:
+                logger.warning(f"记录产品删除日志失败: {e}")
             
             return BaseResponse(
                 success=True,

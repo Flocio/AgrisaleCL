@@ -18,6 +18,7 @@ from server.models import (
     PaginatedResponse,
     DateRangeFilter
 )
+from server.services.audit_log_service import AuditLogService
 
 # 配置日志
 logger = logging.getLogger(__name__)
@@ -359,6 +360,19 @@ async def create_purchase(
                 f"数量: {purchase_data.quantity} (ID: {purchase_id}, 用户: {user_id})"
             )
             
+            # 记录操作日志
+            try:
+                AuditLogService.log_create(
+                    user_id=user_id,
+                    username=current_user.get("username", "unknown"),
+                    entity_type="purchase",
+                    entity_id=purchase_id,
+                    entity_name=f"{purchase_data.productName} (数量: {purchase_data.quantity})",
+                    new_data=purchase.model_dump()
+                )
+            except Exception as e:
+                logger.warning(f"记录采购创建日志失败: {e}")
+            
             return BaseResponse(
                 success=True,
                 message="创建采购记录成功",
@@ -425,6 +439,18 @@ async def update_purchase(
             
             old_quantity = row[3]
             old_product_name = row[2]
+            
+            # 保存旧数据用于日志记录
+            old_data = {
+                "id": row[0],
+                "userId": row[1],
+                "productName": row[2],
+                "quantity": row[3],
+                "purchaseDate": row[4],
+                "supplierId": row[5],
+                "totalPurchasePrice": row[6],
+                "note": row[7]
+            }
             
             # 确定新的数量（如果提供了）
             new_quantity = purchase_data.quantity if purchase_data.quantity is not None else old_quantity
@@ -621,6 +647,21 @@ async def update_purchase(
             
             logger.info(f"更新采购记录成功: {purchase_id} (用户: {user_id})")
             
+            # 记录操作日志
+            try:
+                entity_name = f"{purchase.productName} (数量: {purchase.quantity})"
+                AuditLogService.log_update(
+                    user_id=user_id,
+                    username=current_user.get("username", "unknown"),
+                    entity_type="purchase",
+                    entity_id=purchase_id,
+                    entity_name=entity_name,
+                    old_data=old_data,
+                    new_data=purchase.model_dump()
+                )
+            except Exception as e:
+                logger.warning(f"记录采购更新日志失败: {e}")
+            
             return BaseResponse(
                 success=True,
                 message="更新采购记录成功",
@@ -665,25 +706,39 @@ async def delete_purchase(
     
     try:
         with pool.get_connection() as conn:
-            # 获取采购记录信息
+            # 获取采购记录完整信息用于日志记录
             cursor = conn.execute(
                 """
-                SELECT id, userId, productName, quantity
+                SELECT id, userId, productName, quantity, purchaseDate, supplierId,
+                       totalPurchasePrice, note, created_at
                 FROM purchases
                 WHERE id = ? AND userId = ?
                 """,
                 (purchase_id, user_id)
             )
-            purchase = cursor.fetchone()
+            row = cursor.fetchone()
             
-            if purchase is None:
+            if row is None:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="采购记录不存在或无权限访问"
                 )
             
-            product_name = purchase[2]
-            quantity = purchase[3]
+            # 保存旧数据用于日志记录
+            old_data = {
+                "id": row[0],
+                "userId": row[1],
+                "productName": row[2],
+                "quantity": row[3],
+                "purchaseDate": row[4],
+                "supplierId": row[5],
+                "totalPurchasePrice": row[6],
+                "note": row[7],
+                "created_at": row[8]
+            }
+            
+            product_name = row[2]
+            quantity = row[3]
             
             # 获取产品信息
             product_cursor = conn.execute(
@@ -739,6 +794,20 @@ async def delete_purchase(
             conn.commit()
             
             logger.info(f"删除采购记录成功: {product_name} 数量: {quantity} (ID: {purchase_id}, 用户: {user_id})")
+            
+            # 记录操作日志
+            try:
+                entity_name = f"{product_name} (数量: {quantity})"
+                AuditLogService.log_delete(
+                    user_id=user_id,
+                    username=current_user.get("username", "unknown"),
+                    entity_type="purchase",
+                    entity_id=purchase_id,
+                    entity_name=entity_name,
+                    old_data=old_data
+                )
+            except Exception as e:
+                logger.warning(f"记录采购删除日志失败: {e}")
             
             return BaseResponse(
                 success=True,
