@@ -79,6 +79,15 @@ jobs:
           mkdir -p downloads/{android,ios,macos,windows,api}
           echo "✓ 目录结构已创建"
 
+      - name: Remove large macOS files (over 100MB)
+        run: |
+          echo "=== 清理超过 100MB 的 macOS 文件 ==="
+          # 删除所有超过 100MB 的 macOS 文件（GitHub 限制）
+          find downloads/macos -type f -size +100M -delete 2>/dev/null || true
+          # 也删除 artifacts 中的大文件（如果存在）
+          find artifacts -type f -size +100M -delete 2>/dev/null || true
+          echo "✓ 大文件清理完成"
+
       - name: Download and preserve old version files from GitHub Releases
         run: |
           echo "=== 从 GitHub Release 下载并保留旧版本文件 ==="
@@ -115,12 +124,8 @@ jobs:
               gh release download "$TAG" -p "agrisalecl-ios-${TAG}.ipa" -D "downloads/ios/" 2>/dev/null || true
             fi
             
-            # macOS ZIP
-            MACOS_FILE="downloads/macos/agrisalecl-macos-${TAG}.zip"
-            if [ ! -f "$MACOS_FILE" ]; then
-              echo "  下载 macOS ZIP: $TAG"
-              gh release download "$TAG" -p "agrisalecl-macos-${TAG}.zip" -D "downloads/macos/" 2>/dev/null || true
-            fi
+            # macOS ZIP - 跳过（文件太大，超过 GitHub 100MB 限制）
+            # macOS 文件将直接从 GitHub Release 下载，不存储在 gh-pages 中
             
             # Windows ZIP
             WINDOWS_FILE="downloads/windows/agrisalecl-windows-${TAG}.zip"
@@ -166,13 +171,9 @@ jobs:
             echo "⚠️ iOS IPA 未找到"
           fi
           
-          # 复制 macOS ZIP
-          if [ -f "artifacts/macOS-Build/agrisalecl-macos-${{ env.VERSION_TAG }}.zip" ]; then
-            cp artifacts/macOS-Build/agrisalecl-macos-${{ env.VERSION_TAG }}.zip downloads/macos/
-            echo "✓ macOS ZIP 已复制"
-          else
-            echo "⚠️ macOS ZIP 未找到"
-          fi
+          # macOS ZIP - 跳过（文件太大，超过 GitHub 100MB 限制）
+          # macOS 文件将直接从 GitHub Release 下载
+          echo "⚠️ macOS ZIP 跳过（文件超过 100MB，将从 GitHub Release 下载）"
           
           # 复制 Windows ZIP
           if [ -f "artifacts/Windows-Build/agrisalecl-windows-${{ env.VERSION_TAG }}.zip" ]; then
@@ -198,7 +199,7 @@ jobs:
                 "ipa": "https://agricl.drflo.org/downloads/ios/agrisalecl-ios-${{ env.VERSION_TAG }}.ipa"
               },
               "macos": {
-                "zip": "https://agricl.drflo.org/downloads/macos/agrisalecl-macos-${{ env.VERSION_TAG }}.zip"
+                "zip": "https://github.com/Flocio/AgrisaleCL/releases/download/${{ env.VERSION_TAG }}/agrisalecl-macos-${{ env.VERSION_TAG }}.zip"
               },
               "windows": {
                 "zip": "https://agricl.drflo.org/downloads/windows/agrisalecl-windows-${{ env.VERSION_TAG }}.zip"
@@ -236,6 +237,15 @@ jobs:
         run: |
           echo "=== 最终文件结构 ==="
           ls -laR .
+
+      - name: Remove large files before commit
+        run: |
+          echo "=== 提交前再次检查并删除大文件 ==="
+          # 删除所有超过 100MB 的文件（GitHub 限制）
+          find . -type f -size +100M -not -path './.git/*' -delete 2>/dev/null || true
+          # 删除 artifacts 目录（不应该提交）
+          rm -rf artifacts/ 2>/dev/null || true
+          echo "✓ 大文件清理完成"
 
       - name: Commit and push to gh-pages
         run: |
