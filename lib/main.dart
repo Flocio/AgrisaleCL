@@ -34,6 +34,7 @@ import 'screens/version_info_screen.dart';
 import 'screens/model_settings_screen.dart';
 import 'screens/help_screen.dart';
 import 'screens/audit_log_screen.dart';
+import 'screens/dashboard_screen.dart';
 import 'services/api_service.dart';
 import 'services/auth_service.dart';
 import 'services/auto_backup_service.dart';
@@ -219,6 +220,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         '/model_settings': (context) => ModelSettingsScreen(),
         '/help': (context) => HelpScreen(),
         '/audit-logs': (context) => AuditLogScreen(),
+        '/dashboard': (context) => DashboardScreen(),
       },
     );
   }

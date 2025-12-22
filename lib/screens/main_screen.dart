@@ -116,6 +116,7 @@ class _MainScreenState extends State<MainScreen> {
     {
       'title': '智能分析',
       'items': [
+        {'name': '数据仪表盘', 'icon': Icons.dashboard, 'route': '/dashboard'},
         {'name': '数据分析助手', 'icon': Icons.analytics, 'route': '/data_assistant'},
       ]
     },
