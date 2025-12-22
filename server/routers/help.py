@@ -157,7 +157,7 @@ def _markdown_to_html(markdown: str) -> str:
             margin: 10px 0;
         }
         strong {
-            color: #e74c3c;
+            color: #333;
             font-weight: bold;
         }
         code {
