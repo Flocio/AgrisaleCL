@@ -30,7 +30,6 @@ AgrisaleCL is a distributed data management application that enables real-time c
 - **Client**: Flutter (Dart)
 - **Server**: FastAPI (Python) with SQLite
 - **Data Sync**: Real-time cloud synchronization
-- **Version**: 1.1.1
 
 ## License
 
