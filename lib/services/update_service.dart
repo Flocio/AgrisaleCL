@@ -21,11 +21,6 @@ class UpdateService {
   // 下载源配置（按优先级排序）
   static List<DownloadSource> get DOWNLOAD_SOURCES => [
     DownloadSource(
-      name: '官方下载站',
-      apiUrl: 'https://agricl.drflo.org/downloads/api/latest.json',
-      proxyBase: null,
-    ),
-    DownloadSource(
       name: 'GitHub 直连',
       apiUrl: 'https://api.github.com/repos/$GITHUB_REPO/releases/latest',
       proxyBase: null,
@@ -123,28 +118,16 @@ class UpdateService {
         
         if (_compareVersions(latestVersion, currentVersion) > 0) {
           // 有新版本，获取下载链接
-          String? downloadUrl;
-          
-          // 检查是否是官方下载站的格式（有 downloads 字段）
-          if (data.containsKey('downloads') && data['downloads'] is Map) {
-            // 官方下载站格式
-            downloadUrl = _getDownloadUrlFromOfficialSite(
-              data['downloads'] as Map<String, dynamic>,
-              Platform.operatingSystem,
-            );
-          } else {
-            // GitHub API 格式
-            downloadUrl = _getDownloadUrl(
-              data['assets'] as List,
-              Platform.operatingSystem,
-              source.proxyBase,
-            );
-          }
+          final downloadUrl = _getDownloadUrl(
+            data['assets'] as List,
+            Platform.operatingSystem,
+            source.proxyBase,
+          );
           
           return UpdateInfo(
             version: latestVersionTag,
             currentVersion: currentVersion,
-            releaseNotes: data['release_notes'] ?? data['body'] ?? '',
+            releaseNotes: data['body'] ?? '',
             downloadUrl: downloadUrl,
             githubReleasesUrl: GITHUB_RELEASES_URL,
           );
@@ -168,37 +151,7 @@ class UpdateService {
     }
   }
   
-  // 从官方下载站获取下载链接
-  static String? _getDownloadUrlFromOfficialSite(
-    Map<String, dynamic> downloads,
-    String platform,
-  ) {
-    if (platform == 'android') {
-      // 优先返回 APK
-      if (downloads['android'] != null) {
-        final android = downloads['android'] as Map<String, dynamic>;
-        return android['apk'] as String? ?? android['aab'] as String?;
-      }
-    } else if (platform == 'ios') {
-      if (downloads['ios'] != null) {
-        final ios = downloads['ios'] as Map<String, dynamic>;
-        return ios['ipa'] as String?;
-      }
-    } else if (platform == 'macos') {
-      if (downloads['macos'] != null) {
-        final macos = downloads['macos'] as Map<String, dynamic>;
-        return macos['zip'] as String?;
-      }
-    } else if (platform == 'windows') {
-      if (downloads['windows'] != null) {
-        final windows = downloads['windows'] as Map<String, dynamic>;
-        return windows['zip'] as String?;
-      }
-    }
-    return null;
-  }
-  
-  // 获取下载链接（支持代理，GitHub API 格式）
+  // 获取下载链接（支持代理）
   static String? _getDownloadUrl(List assets, String platform, String? proxyBase) {
     if (platform == 'android') {
       // Android优先查找APK文件（可以直接安装），如果没有再查找AAB文件
